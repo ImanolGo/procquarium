@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-09
+
 ### Added
 
 - `--colors auto|truecolor|256|none`. `auto` uses 24-bit RGB when `COLORTERM`
