@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use super::{ProcInfo, ProcStatus, ProcessSource, Snapshot};
+use super::{KillOutcome, ProcInfo, ProcStatus, ProcessSource, Snapshot};
 
 /// Returns previously scripted snapshots in order. Once the script runs out it
 /// keeps returning the last snapshot, which makes it easy to hold a steady
@@ -13,6 +13,11 @@ use super::{ProcInfo, ProcStatus, ProcessSource, Snapshot};
 pub struct FakeSource {
     snapshots: Vec<Snapshot>,
     index: usize,
+    /// The last snapshot handed out, so `kill_term` can answer the way a real
+    /// source would after refreshing.
+    current: Snapshot,
+    /// Kills that were actually signalled, for tests to assert on.
+    pub kills: Vec<(u32, u64)>,
 }
 
 impl FakeSource {
@@ -20,6 +25,8 @@ impl FakeSource {
         Self {
             snapshots,
             index: 0,
+            current: Snapshot::default(),
+            kills: Vec::new(),
         }
     }
 
@@ -41,7 +48,19 @@ impl ProcessSource for FakeSource {
         if self.index + 1 < self.snapshots.len() {
             self.index += 1;
         }
+        self.current = snap.clone();
         Ok(snap)
+    }
+
+    fn kill_term(&mut self, id: (u32, u64)) -> KillOutcome {
+        match self.current.procs.get(&id.0) {
+            None => KillOutcome::AlreadyExited,
+            Some(p) if p.identity() != id => KillOutcome::PidReused,
+            Some(_) => {
+                self.kills.push(id);
+                KillOutcome::Signalled
+            }
+        }
     }
 }
 

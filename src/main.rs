@@ -230,6 +230,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Re
                         Some("could not renice (need privileges); feeding has no effect".into());
                 }
                 sampler::Event::Boost(_) => {}
+                sampler::Event::Kill { id, outcome } => app.finish_kill(id, outcome),
                 sampler::Event::Error(error) => {
                     app.status = Some(format!("sample error: {error}"));
                 }
@@ -263,8 +264,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Re
         for id in app.take_pending_restores() {
             sampler.restore(id);
         }
-        for pid in app.take_pending_kills() {
-            sampler.kill(pid);
+        for id in app.take_pending_kills() {
+            sampler.kill(id);
         }
 
         terminal.draw(|frame| render::draw(frame, &app))?;

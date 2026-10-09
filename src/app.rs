@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::config::Config;
 use crate::diff;
-use crate::source::{ProcInfo, Snapshot};
+use crate::source::{KillOutcome, ProcInfo, Snapshot};
 use crate::tank::Tank;
 
 /// Top-level state. The tank is pure simulation; the rest is UI state and the
@@ -40,8 +40,10 @@ pub struct App {
     search_prev: Option<u32>,
     /// A pending "send SIGTERM to ...?" confirmation.
     confirm: Option<ProcInfo>,
-    /// Pids to signal, drained by the main loop.
-    pending_kills: Vec<u32>,
+    /// Identities `(pid, start_time)` to signal, drained by the main loop.
+    pending_kills: Vec<(u32, u64)>,
+    /// The name of each confirmed kill, for the status line when it finishes.
+    kill_names: HashMap<(u32, u64), String>,
 }
 
 /// How many CPU samples to remember, and how many to draw.
@@ -69,6 +71,7 @@ impl App {
             search_prev: None,
             confirm: None,
             pending_kills: Vec::new(),
+            kill_names: HashMap::new(),
         }
     }
 
@@ -105,9 +108,26 @@ impl App {
             .procs
             .get(&std::process::id())
             .and_then(|p| p.user.clone());
+
         self.prev = snapshot;
         self.ready = true;
         self.status = None;
+
+        // If the fish we were asked to kill has died or left the tank, close
+        // the prompt: there is nothing left to confirm.
+        if let Some(id) = self.confirm.as_ref().map(|c| c.identity()) {
+            let present = self
+                .prev
+                .procs
+                .get(&id.0)
+                .is_some_and(|p| p.identity() == id);
+            let resident = self.tank.fish(id.0).is_some_and(|f| f.identity() == id);
+            if (!present || !resident)
+                && let Some(confirm) = self.confirm.take()
+            {
+                self.status = Some(format!("{} is no longer running", confirm.name));
+            }
+        }
 
         if let Some(pid) = self.selected
             && !self.tank.has_living(pid)
@@ -198,12 +218,15 @@ impl App {
         self.confirm.as_ref()
     }
 
-    /// Confirm the kill: queue the signal for our own processes only.
+    /// Confirm the kill: queue the signal for our own processes only. The whole
+    /// identity is queued, so the signal is refused if the pid is reused before
+    /// it is sent.
     pub fn confirm_kill(&mut self) {
         if let Some(info) = self.confirm.take()
             && owns_process(&info, self.self_user.as_deref())
         {
-            self.pending_kills.push(info.pid);
+            self.kill_names.insert(info.identity(), info.name.clone());
+            self.pending_kills.push(info.identity());
         }
     }
 
@@ -212,9 +235,23 @@ impl App {
         self.confirm = None;
     }
 
-    /// Pids to signal since the last call.
-    pub fn take_pending_kills(&mut self) -> Vec<u32> {
+    /// Identities to signal since the last call.
+    pub fn take_pending_kills(&mut self) -> Vec<(u32, u64)> {
         std::mem::take(&mut self.pending_kills)
+    }
+
+    /// Report the outcome of a confirmed kill in the status line.
+    pub fn finish_kill(&mut self, id: (u32, u64), outcome: KillOutcome) {
+        let name = self
+            .kill_names
+            .remove(&id)
+            .unwrap_or_else(|| format!("pid {}", id.0));
+        self.status = Some(match outcome {
+            KillOutcome::Signalled => format!("sent SIGTERM to {name}"),
+            KillOutcome::AlreadyExited => format!("{name} had already exited"),
+            KillOutcome::PidReused => format!("{name} had already exited (pid was reused)"),
+            KillOutcome::Failed => format!("could not signal {name}"),
+        });
     }
 
     /// Open the search line, remembering the selection to restore on cancel.
@@ -500,7 +537,7 @@ mod tests {
         app.start_kill();
         assert!(app.kill_prompt().is_some());
         app.confirm_kill();
-        assert_eq!(app.take_pending_kills(), vec![1]);
+        assert_eq!(app.take_pending_kills(), vec![(1, 1)]);
 
         // Someone else's process is refused.
         let mut app = App::new(
@@ -518,6 +555,52 @@ mod tests {
         app.start_kill();
         app.confirm_kill();
         assert!(app.take_pending_kills().is_empty());
+    }
+
+    #[test]
+    fn kill_prompt_closes_when_the_process_exits() {
+        let mut app = App::new(
+            Config::builder().kill(true).build().expect("valid"),
+            80,
+            24,
+            1,
+        );
+        app.apply_snapshot(snapshot(vec![proc(1, "a").with_user("me")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.self_user = Some("me".into());
+        app.selected = Some(1);
+        app.start_kill();
+        assert!(app.kill_prompt().is_some());
+
+        // The process is gone from the next snapshot: the prompt closes itself.
+        app.apply_snapshot(snapshot(vec![proc(2, "other").with_user("me")]));
+        assert!(
+            app.kill_prompt().is_none(),
+            "prompt closes when the fish dies"
+        );
+        assert_eq!(app.status.as_deref(), Some("a is no longer running"));
+    }
+
+    #[test]
+    fn kill_outcomes_are_reported_in_the_status_line() {
+        let mut app = App::new(config(), 80, 24, 1);
+        let id = (42, 7);
+        let cases = [
+            (KillOutcome::Signalled, "sent SIGTERM to firefox"),
+            (KillOutcome::AlreadyExited, "firefox had already exited"),
+            (
+                KillOutcome::PidReused,
+                "firefox had already exited (pid was reused)",
+            ),
+            (KillOutcome::Failed, "could not signal firefox"),
+        ];
+        for (outcome, expected) in cases {
+            app.kill_names.insert(id, "firefox".to_string());
+            app.finish_kill(id, outcome);
+            assert_eq!(app.status.as_deref(), Some(expected));
+        }
     }
 
     #[test]

@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `--kill` can no longer signal the wrong process. The confirmation carries the
+  process's start time as well as its pid, the process is refreshed just before
+  the signal and refused if the pid has been reused, the prompt closes itself
+  when the fish dies or leaves, and the outcome is reported in the status line.
+
 ### Changed
 
 - `--config` now loads a full config file: the theme lives under a `[theme]`

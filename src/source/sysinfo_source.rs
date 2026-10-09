@@ -8,7 +8,7 @@ use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users};
 use super::priority::BoostBook;
 #[cfg(unix)]
 use super::priority::PriorityBackend;
-use super::{PriorityBoost, ProcInfo, ProcStatus, ProcessSource, Snapshot};
+use super::{KillOutcome, PriorityBoost, ProcInfo, ProcStatus, ProcessSource, Snapshot};
 
 /// Live process source. A fresh `SysinfoSource` performs one refresh on
 /// construction; callers should wait at least
@@ -184,12 +184,24 @@ impl ProcessSource for SysinfoSource {
         PriorityBoost::Unsupported
     }
 
-    fn kill_term(&mut self, pid: u32) -> bool {
+    fn kill_term(&mut self, id: (u32, u64)) -> KillOutcome {
         use sysinfo::{Pid, Signal};
-        self.system
-            .process(Pid::from_u32(pid))
-            .and_then(|process| process.kill_with(Signal::Term))
-            .unwrap_or(false)
+        let pid = Pid::from_u32(id.0);
+        // Refresh just this process so its start time is current: if it exited
+        // and the pid was reused, we must not signal the new owner.
+        self.system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&[pid]),
+            true,
+            refresh_kind(),
+        );
+        match self.system.process(pid) {
+            None => KillOutcome::AlreadyExited,
+            Some(process) if process.start_time() != id.1 => KillOutcome::PidReused,
+            Some(process) => match process.kill_with(Signal::Term) {
+                Some(true) => KillOutcome::Signalled,
+                _ => KillOutcome::Failed,
+            },
+        }
     }
 }
 

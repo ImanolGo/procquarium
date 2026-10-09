@@ -90,11 +90,27 @@ pub trait ProcessSource {
     /// Undo every boost (called on the way out).
     fn restore_all_priorities(&mut self) {}
 
-    /// Send SIGTERM to a process. Opt-in (`--kill`); returns whether the signal
-    /// was delivered. The default is a no-op.
-    fn kill_term(&mut self, _pid: u32) -> bool {
-        false
+    /// Send SIGTERM to a process, identified by pid and start time. Opt-in
+    /// (`--kill`). A source must re-check the process just before signalling and
+    /// refuse when the start time no longer matches, so a reused pid is never
+    /// signalled. The default is a no-op.
+    fn kill_term(&mut self, _id: (u32, u64)) -> KillOutcome {
+        KillOutcome::Failed
     }
+}
+
+/// What happened when a [`ProcessSource::kill_term`] was attempted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KillOutcome {
+    /// SIGTERM was delivered.
+    Signalled,
+    /// The process had already exited.
+    AlreadyExited,
+    /// The pid now belongs to a different process (its start time changed), so
+    /// nothing was signalled.
+    PidReused,
+    /// The signal could not be sent (for example, permission denied).
+    Failed,
 }
 
 /// Result of a [`ProcessSource::boost_priority`] attempt.
@@ -159,5 +175,39 @@ mod tests {
         assert_eq!(Snapshot::default().with_load(2.0).load, 1.0);
         assert_eq!(Snapshot::default().with_load(-1.0).load, 0.0);
         assert_eq!(Snapshot::default().with_load(0.4).load, 0.4);
+    }
+
+    #[test]
+    fn a_matching_process_is_signalled() {
+        use crate::source::fake::{FakeSource, proc, snapshot};
+
+        let mut source = FakeSource::new(vec![snapshot(vec![proc(1, "a").with_start_time(1)])]);
+        source.snapshot().expect("sample");
+        assert_eq!(source.kill_term((1, 1)), KillOutcome::Signalled);
+        assert_eq!(source.kills, vec![(1, 1)]);
+    }
+
+    #[test]
+    fn a_reused_pid_is_not_signalled() {
+        use crate::source::fake::{FakeSource, proc, snapshot};
+
+        // pid 1 exits and the pid is reused by a new process before the kill is
+        // confirmed.
+        let mut source = FakeSource::new(vec![
+            snapshot(vec![proc(1, "old").with_start_time(1)]),
+            snapshot(vec![proc(1, "new").with_start_time(2)]),
+        ]);
+        source.snapshot().expect("first sample");
+        source.snapshot().expect("second sample");
+
+        // The confirmed request was for the old process, which is gone.
+        assert_eq!(source.kill_term((1, 1)), KillOutcome::PidReused);
+        assert!(
+            source.kills.is_empty(),
+            "the reused pid must not be signalled"
+        );
+
+        // A process that has fully exited is reported as gone.
+        assert_eq!(source.kill_term((2, 1)), KillOutcome::AlreadyExited);
     }
 }

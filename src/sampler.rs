@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::source::record::Recorder;
 use crate::source::sysinfo_source::SysinfoSource;
-use crate::source::{PriorityBoost, ProcessSource, Snapshot};
+use crate::source::{KillOutcome, PriorityBoost, ProcessSource, Snapshot};
 
 /// What the worker sends back to the render loop.
 #[derive(Debug)]
@@ -18,6 +18,11 @@ pub enum Event {
     Snapshot(Snapshot),
     /// The outcome of a priority nudge.
     Boost(PriorityBoost),
+    /// The outcome of a kill request.
+    Kill {
+        id: (u32, u64),
+        outcome: KillOutcome,
+    },
     /// A sampling error, to be shown in the status line.
     Error(String),
 }
@@ -25,7 +30,7 @@ pub enum Event {
 enum Command {
     Boost((u32, u64)),
     Restore((u32, u64)),
-    Kill(u32),
+    Kill((u32, u64)),
     Shutdown,
 }
 
@@ -81,9 +86,10 @@ impl Sampler {
         let _ = self.commands.send(Command::Restore(id));
     }
 
-    /// Ask the worker to send SIGTERM to a process.
-    pub fn kill(&self, pid: u32) {
-        let _ = self.commands.send(Command::Kill(pid));
+    /// Ask the worker to send SIGTERM to a process identified by pid and start
+    /// time.
+    pub fn kill(&self, id: (u32, u64)) {
+        let _ = self.commands.send(Command::Kill(id));
     }
 
     /// Non-blocking poll for the next event.
@@ -141,8 +147,12 @@ fn worker<S>(
                     }
                 }
                 Ok(Command::Restore(id)) => source.restore_priority(id),
-                Ok(Command::Kill(pid)) => {
-                    source.kill_term(pid);
+                Ok(Command::Kill(id)) => {
+                    let outcome = source.kill_term(id);
+                    if events.send(Event::Kill { id, outcome }).is_err() {
+                        source.restore_all_priorities();
+                        return;
+                    }
                 }
                 Err(RecvTimeoutError::Timeout) => break,
             }

@@ -120,7 +120,7 @@ Flags:
 | `--config <PATH>` | Load a config file: theme and defaults (see below) |
 | `--record <PATH>` | Write each snapshot to a file as a JSON line |
 | `--replay <PATH>` | Replay a recording instead of sampling |
-| `--kill` | Allow `k` to send SIGTERM to the selected process (asks first) |
+| `--kill` | Allow `k` to send SIGTERM to the selected process (asks first; re-checks the pid just before signalling) |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
 
 `procquarium --dump` (hidden) prints the process table as a plain table and
