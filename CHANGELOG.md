@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
+### Added
+
+- Day/night: the water gets darker as overall system load rises.
+- Crabs scuttle along the sand for kernel threads (shown with `--kernel`), and
+  container processes appear as pulsing jellyfish.
+- `--feed`: press `f` to drop food; fish that eat get a small, opt-in priority
+  nudge (`setpriority`), only ever for processes you own.
+- `--config <PATH>` (or `$XDG_CONFIG_HOME/procquarium/config.toml`) for custom
+  palettes and sprites, with an example file in `procquarium.example.toml`.
+- A recorded demo GIF at the top of the README (`demo.gif`, `demo.tape`).
+
+### Changed
+
+- Process names (labels) now shown by default; `l` still toggles them.
+- Default `--max-fish` lowered from 60 to 25 for a calmer tank.
+- Fish spread through the whole water column instead of settling on the sand.
+
+### Fixed
+
+- Threads are no longer mistaken for processes: `sysinfo`'s
+  `ProcessRefreshKind::nothing()` enables tasks by default, so on Linux every
+  thread showed up as a fish. One fish is now one process, which also cut
+  sampling CPU by roughly four times.
+- Guard against degenerate terminal sizes (a fresh pty reports 0×0), which
+  could panic the decor.
+
 ## [0.1.0] - 2026-10-09
 
 ### Added
@@ -26,5 +54,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.1.0
