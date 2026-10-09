@@ -1,6 +1,6 @@
 # Maintainer: ImanolGo <ImanolGo@users.noreply.github.com>
 pkgname=procquarium
-pkgver=0.2.2
+pkgver=0.2.3
 pkgrel=1
 pkgdesc="Your running processes, as fish"
 arch=('x86_64' 'aarch64')
@@ -9,7 +9,7 @@ license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('01c82c3ee20922df21346191f3a7a4c5fe870d033cc1ec9585421850feb417f0')
+sha256sums=('83b8fcbd716397e29713867a462c9b997d9473bff1deba755832750e5385f72c')
 
 prepare() {
   cd "$pkgname-$pkgver"
