@@ -1,0 +1,28 @@
+[package]
+name = "procquarium"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Your running processes, as fish."
+license = "MIT"
+repository = "https://github.com/ImanolGo/procquarium"
+readme = "README.md"
+keywords = ["tui", "process", "monitor", "aquarium", "ratatui"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+ratatui = "0.30"
+crossterm = "0.29"
+sysinfo = "0.39"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+rand = "0.9"
+rand_chacha = "0.9"
+regex = "1"
+
+[dev-dependencies]
+insta = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
