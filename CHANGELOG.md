@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-09
+
+### Added
+
+- Automatic crates.io publishing on version tags via Trusted Publishing, and
+  crates.io / docs.rs / CI / release / license badges in the README.
+
+### Changed
+
+- Documentation: a "Releasing" section describing the tag-driven release flow.
+
 ## [0.2.2] - 2026-10-09
 
 ### Fixed
@@ -72,7 +83,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.3
 [0.2.2]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.0
