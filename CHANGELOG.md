@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-09
+
+### Changed
+
+- README and DEVELOPMENT.md brought up to date with the 0.3 features, and a
+  fresh demo GIF showing search, the details box and feeding.
+- `0.2.6` is yanked on crates.io: its Windows binary never built (a Unix-only
+  `libc` reference), and `0.3.0` supersedes it.
+
 ## [0.3.0] - 2026-10-09
 
 ### Added
@@ -156,7 +165,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/ImanolGo/procquarium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.3.0
 [0.2.6]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.5

@@ -49,10 +49,11 @@ arrives in M2, so M1 temporarily carries `#[allow(dead_code)]` (removed in M2).
 
 ## Notable decisions and deviations from PLAN.md
 
-- **`ProcInfo` gained two fields** beyond the plan's sketch: `start_time` (so a
-  reused PID is detected) and `kernel` (so the source, not the simulation,
-  decides what a kernel thread is). Both are computed in
-  `source/sysinfo_source.rs`.
+- **`ProcInfo` grew beyond the plan's sketch**: `start_time` (detects a reused
+  PID) and `kernel` (the source, not the simulation, decides what a kernel
+  thread is), plus `container` (cgroup heuristic), `io` (disk bytes per sample,
+  for the I/O bubbles) and `run_time` (for the barnacles on old fish). All are
+  computed in `source/sysinfo_source.rs`.
 - **Threads are not processes.** `sysinfo`'s `ProcessRefreshKind::nothing()`
   still enables `tasks`, so on Linux every thread shows up as a process. M6 adds
   `.without_tasks()`; before that a busy machine put ~4× too many fish on
@@ -69,9 +70,9 @@ arrives in M2, so M1 temporarily carries `#[allow(dead_code)]` (removed in M2).
   `home_y` it steers towards. Without it, fish hatched on the sand, got one
   small upward impulse and then settled along the bottom instead of spreading
   through the tank.
-- **No demo GIF is committed.** `demo.tape` is included and the README explains
-  how to render it with [vhs](https://github.com/charmbracelet/vhs); recording
-  it needs a real terminal and a running machine, which CI does not have.
+- **The demo GIF is committed.** `demo.gif` is recorded from `demo.tape` with
+  [vhs](https://github.com/charmbracelet/vhs) and the crate excludes it (see
+  `Cargo.toml`) so it does not bloat the published package.
 
 ## Performance
 
@@ -84,10 +85,29 @@ Measured with a release build on a 425-process machine, draining a 120×40 pty:
 
 The plan's target of under 2% of one core is generous for a light machine but
 tight here, because the cost is dominated by `sysinfo` scanning the process
-table. If it needs to come down further, the options are a background sampler
-thread (smooths the spikes), refreshing memory on alternate samples, or
-adapting the sample interval — none of which change the picture much, so they
-were left for later.
+table. Sampling now runs on a background thread (see below), so a slow sample
+no longer stutters a frame, but the CPU cost is the same. If it needs to come
+down further, the options are refreshing memory on alternate samples or adapting
+the sample interval — neither changes the picture much.
+
+## The review round (0.2.6–0.3.0)
+
+A code review (kept out of the repo) listed seventeen items, fixed in order, one
+commit each:
+
+- **Bugs:** sprites mirrored correctly; selection reconciled against the
+  snapshot with identity `(pid, start_time)`; mouse capture in screensaver mode;
+  `--interval`/`--max-fish` validation; feeding capped and reversible.
+- **Improvements:** sampling (and renice) moved to a background thread;
+  hysteresis at the top-N cut-off; eggs mean "just started" again; `NO_COLOR`,
+  a `Config::builder()` and dead-state removal.
+- **New features:** click to select (`--no-mouse`), family highlight and a dotted
+  line to the parent, a CPU sparkline, disk-I/O bubbles, `/` search,
+  `--record`/`--replay`, barnacles on old fish, and `--kill` with confirmation.
+
+The Windows build for the 0.2.6 tag failed because the errno helper referenced
+the Unix-only `libc` crate; 0.3.0 carries the fix. That is why 0.2.6 was never
+released on GitHub (and is yanked on crates.io).
 
 ## After 0.1
 
@@ -103,9 +123,10 @@ one commit each:
   competing for fish; container detection reads `/proc/<pid>/cgroup` on Linux
   and is cached per process, so it costs nothing after the first sample.
 - **Feeding.** With `--feed`, `f` drops a pellet that sinks; a fish that reaches
-  one eats it and glows, and its process gets a one-step `setpriority` nudge
-  (via `libc`). It only ever touches processes owned by you, and reports when
-  the kernel refuses the change (`Denied`) instead of pretending it worked.
+  one eats it and glows, and its process gets a small `setpriority` nudge (via
+  `libc`). Boosts are capped at two steps below the original niceness and are
+  undone when the fish leaves or on exit; it only ever touches processes owned
+  by you, and reports when the kernel refuses the change (`Denied`).
 - **Themes.** `--config <PATH>` (or `$XDG_CONFIG_HOME/procquarium/config.toml`)
   loads a TOML palette and sprite overrides. `Theme::from_toml` is pure and
   tested; the renderer reads the palette and a `Sprites` set out of the config,

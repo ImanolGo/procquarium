@@ -12,7 +12,7 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 
 ![procquarium: fish for processes, crabs for kernel threads, jellyfish for containers](https://raw.githubusercontent.com/ImanolGo/procquarium/main/demo.gif)
 
-> **Status:** 0.2 — usable and still growing. The plan lives in [PLAN.md](PLAN.md); see [DEVELOPMENT.md](DEVELOPMENT.md) for how it is built.
+> **Status:** 0.3 — usable and still growing. The plan lives in [PLAN.md](PLAN.md); see [DEVELOPMENT.md](DEVELOPMENT.md) for how it is built.
 
 ## What the fish mean
 
@@ -29,6 +29,8 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 | A jellyfish pulsing | A process inside a container (Linux) |
 | Water getting darker | Overall system load rising |
 | A fish glowing after you feed it | You gave its process a small priority nudge (`--feed`) |
+| A barnacle (`·`, then `:`) on a fish | A process that has been running for a day (then a week) |
+| A fish trailing bubbles as it swims | A process doing disk I/O |
 
 ## Install
 
@@ -69,8 +71,8 @@ cargo install procquarium
 
 ### Arch Linux
 
-The `PKGBUILD` lives in [`packaging/aur`](packaging/aur); an AUR package is
-coming.
+A `PKGBUILD` is provided in [`packaging/aur`](packaging/aur) (not published to
+the AUR yet).
 
 ## Usage
 
@@ -82,6 +84,9 @@ procquarium --max-fish 120  # crowded tank
 procquarium --filter '^rust' --interval 0.5
 procquarium --feed           # press f to drop food
 procquarium --seed 7        # the same tank every time
+procquarium --config theme.toml  # your own colours and sprites
+procquarium --record run.jsonl   # save a session
+procquarium --replay run.jsonl   # play it back later
 ```
 
 Keys while it's running:
@@ -97,6 +102,10 @@ Keys while it's running:
 | Click a fish | Select it (click empty water to clear) |
 | `/` | Search for a process by name |
 | `k` | Send SIGTERM to the selected process (with `--kill`) |
+
+Click a fish to select it, or press `/` to search by name. The details box
+shows the PID, CPU (with a one-row sparkline), memory and status, and a dotted
+line links the selection to its parent, with children and parent highlighted.
 
 Flags:
 
@@ -160,7 +169,9 @@ Linux and macOS are the main targets. Windows should work, but zombie fish won't
 
 ## How it works
 
-Once a second procquarium takes a snapshot of the process table with [`sysinfo`](https://crates.io/crates/sysinfo), compares it with the previous one, and turns the differences into events: births, deaths, things getting hungrier. The tank itself runs at around 30 frames per second and draws with [`ratatui`](https://ratatui.rs). Fish ease towards their new size and speed rather than jumping, so the picture stays calm even when your machine isn't.
+Once a second procquarium takes a snapshot of the process table with [`sysinfo`](https://crates.io/crates/sysinfo), compares it with the previous one, and turns the differences into events: births, deaths, things getting hungrier. The tank itself runs at around 30 frames per second and draws with [`ratatui`](https://ratatui.rs). Sampling (and any renice or signal work) happens on a background thread, so a slow sample never stutters a frame. Fish ease towards their new size and speed rather than jumping, so the picture stays calm even when your machine isn't.
+
+For demos and bug reports, `--record` writes every snapshot to a file as a line of JSON and `--replay` plays one back through the same pipeline.
 
 procquarium tries hard to be a polite guest. It should stay under a couple of percent of one core, and yes, it shows up in its own tank.
 

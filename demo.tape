@@ -2,7 +2,7 @@
 #
 #   vhs demo.tape
 #
-# The fixed seed makes the recording repeatable.
+# The fixed seed makes the tank repeatable.
 
 Output demo.gif
 
@@ -20,15 +20,23 @@ Type "procquarium --seed 7 --max-fish 30 --kernel --feed"
 Enter
 Sleep 7s
 
+# Show the process names.
+Type "l"
+Sleep 2s
+
+# Search for a process by name.
+Type "/co"
+Sleep 2s
+Enter
+Sleep 2s
+
+# Select a fish: the details box, CPU sparkline and family line.
+Tab
+Sleep 4s
+
 # Drop some food; nearby fish swim over and eat it.
 Type "fff"
-Sleep 5s
-
-# Show the process names, then select a fish for its details box.
-Type "l"
-Sleep 1s
-Tab
-Sleep 3s
+Sleep 4s
 
 # Pause for a moment, then quit.
 Space
