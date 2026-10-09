@@ -6,6 +6,7 @@ mod diff;
 mod render;
 mod source;
 mod tank;
+mod theme;
 
 use std::time::{Duration, Instant};
 
@@ -76,6 +77,10 @@ struct Cli {
     #[arg(long, value_name = "N")]
     seed: Option<u64>,
 
+    /// Path to a TOML theme file (palette and sprites).
+    #[arg(long, value_name = "PATH")]
+    config: Option<std::path::PathBuf>,
+
     /// Print one snapshot as a table and exit.
     #[arg(long, hide = true)]
     dump: bool,
@@ -83,7 +88,7 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let config = Config::new(
+    let mut config = Config::new(
         cli.interval,
         cli.max_fish,
         cli.user,
@@ -105,6 +110,8 @@ fn main() -> Result<()> {
         print_dump(&snapshot);
         return Ok(());
     }
+
+    config.theme = theme::Theme::load(cli.config.as_deref())?;
 
     let seed = config.seed.unwrap_or_else(|| rand::rng().random());
     let mut terminal = ratatui::init();

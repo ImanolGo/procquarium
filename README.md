@@ -79,10 +79,29 @@ Flags:
 | `--ascii` | Use plain ASCII glyphs instead of the Unicode ones |
 | `--screensaver` | Exit on any key or mouse event; no labels or info box |
 | `--feed` | Let `f` drop food; fed fish get a small priority nudge |
+| `--config <PATH>` | Load a theme from a TOML file |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
 
 `procquarium --dump` (hidden) prints the process table as a plain table and
 exits; it's handy for checking what the aquarium would see on another machine.
+
+### Themes
+
+Give the tank your own colours and sprites with a TOML file (`--config`, or
+`$XDG_CONFIG_HOME/procquarium/config.toml`). Everything is optional; anything
+you leave out keeps its default.
+
+```toml
+# Fish colours are picked from this list by process name.
+palette = ["#ff6b6b", "#4ecdc4", "#ffe66d"]
+
+[sprites]
+# Four fish, smallest to largest. The eye (o/°) becomes ✕ for zombies.
+fish = ["><>", "><(°>", "><((°>", "><(((°>"]
+fish_ascii = ["><>", "><(o>", "><((o>", "><(((o>"]
+crab = "><°°><"
+jellyfish = "~(°°)~"
+```
 
 A demo GIF is recorded from [`demo.tape`](demo.tape) with
 [vhs](https://github.com/charmbracelet/vhs):

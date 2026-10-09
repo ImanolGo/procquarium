@@ -106,6 +106,10 @@ one commit each:
   one eats it and glows, and its process gets a one-step `setpriority` nudge
   (via `libc`). It only ever touches processes owned by you, and reports when
   the kernel refuses the change (`Denied`) instead of pretending it worked.
+- **Themes.** `--config <PATH>` (or `$XDG_CONFIG_HOME/procquarium/config.toml`)
+  loads a TOML palette and sprite overrides. `Theme::from_toml` is pure and
+  tested; the renderer reads the palette and a `Sprites` set out of the config,
+  so custom sprites and colours flow everywhere with no globals.
 
 ## Running it
 

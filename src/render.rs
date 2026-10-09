@@ -10,7 +10,8 @@ use ratatui::widgets::Paragraph;
 use crate::app::App;
 use crate::source::ProcStatus;
 use crate::tank::fish::{CreatureKind, Facing, Fish, FishState};
-use crate::tank::{mapping, sprites};
+use crate::tank::mapping;
+use crate::theme::Theme;
 
 const WATER_TOP: Color = Color::Rgb(8, 24, 48);
 const WATER_BOTTOM: Color = Color::Rgb(4, 12, 30);
@@ -40,6 +41,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     let time = app.tank.time;
     let ascii = app.config.ascii;
+    let theme = &app.config.theme;
 
     // Day/night: as the machine gets busier the water gets darker.
     let night = night_fraction(app.load);
@@ -74,7 +76,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             x,
             y,
             if ascii { 'o' } else { '°' },
-            Style::default().fg(mapping::color_for_name(&egg.info.name)),
+            Style::default().fg(mapping::color_for_name(&egg.info.name, &theme.palette)),
         );
     }
 
@@ -87,6 +89,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             fish,
             app.selected == Some(fish.pid),
             ascii,
+            theme,
             &mut sprites_buf,
         );
     }
@@ -95,7 +98,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         if app.show_labels {
             for fish in &app.tank.fish {
                 if fish.state != FishState::Exiting {
-                    draw_label(buf, area, fish);
+                    draw_label(buf, area, fish, &theme.palette);
                 }
             }
         }
@@ -233,13 +236,14 @@ fn draw_fish(
     fish: &Fish,
     selected: bool,
     ascii: bool,
+    theme: &Theme,
     sprite_buf: &mut Vec<char>,
 ) {
     let zombie = fish.is_zombie();
     let base = if zombie {
         ZOMBIE
     } else {
-        mapping::color_for_name(&fish.info.name)
+        mapping::color_for_name(&fish.info.name, &theme.palette)
     };
     let mut style = Style::default().fg(base);
     if zombie {
@@ -258,12 +262,16 @@ fn draw_fish(
     let facing_left = fish.facing == Facing::Left;
     let size = fish.size.round().clamp(0.0, 3.0) as u8;
     match fish.kind {
-        CreatureKind::Crab => sprites::crab_into(sprite_buf, ascii, zombie),
-        CreatureKind::Jellyfish => sprites::jellyfish_into(sprite_buf, ascii, zombie),
+        CreatureKind::Crab => theme.sprites.crab_into(sprite_buf, ascii, zombie),
+        CreatureKind::Jellyfish => theme.sprites.jellyfish_into(sprite_buf, ascii, zombie),
         CreatureKind::Fish if fish.state == FishState::Exiting => {
-            sprites::dead_sprite_into(sprite_buf, size, facing_left, ascii);
+            theme
+                .sprites
+                .dead_fish_into(sprite_buf, size, facing_left, ascii);
         }
-        CreatureKind::Fish => sprites::sprite_into(sprite_buf, size, facing_left, ascii, zombie),
+        CreatureKind::Fish => theme
+            .sprites
+            .fish_into(sprite_buf, size, facing_left, ascii, zombie),
     }
 
     let len = sprite_buf.len() as i32;
@@ -274,13 +282,13 @@ fn draw_fish(
     }
 }
 
-fn draw_label(buf: &mut Buffer, area: Rect, fish: &Fish) {
+fn draw_label(buf: &mut Buffer, area: Rect, fish: &Fish, palette: &[Color]) {
     let label: String = fish.info.name.chars().take(10).collect();
     let len = label.chars().count() as i32;
     let x = (fish.pos.0.round() as i32 - len / 2).max(i32::from(area.x));
     let y = fish.pos.1.round() as i32 + 1;
     if y < i32::from(area.bottom() - 1) {
-        let style = Style::default().fg(mapping::color_for_name(&fish.info.name));
+        let style = Style::default().fg(mapping::color_for_name(&fish.info.name, palette));
         draw_text(buf, area, x, y, &label, style);
     }
 }

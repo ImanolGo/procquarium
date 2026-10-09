@@ -5,6 +5,8 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use regex::Regex;
 
+use crate::theme::Theme;
+
 /// Everything the simulation and UI need to know about how the user wants to run.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -28,6 +30,8 @@ pub struct Config {
     pub seed: Option<u64>,
     /// Print a snapshot and exit (hidden debugging flag).
     pub dump: bool,
+    /// Colours and sprites, optionally loaded from a config file.
+    pub theme: Theme,
 }
 
 impl Config {
@@ -67,6 +71,7 @@ impl Config {
             feed,
             seed,
             dump,
+            theme: Theme::default(),
         })
     }
 }

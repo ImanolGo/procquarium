@@ -1,0 +1,24 @@
+# Example procquarium theme. Copy to
+#   $XDG_CONFIG_HOME/procquarium/config.toml   (usually ~/.config/procquarium/config.toml)
+# or pass it explicitly with `procquarium --config procquarium.example.toml`.
+#
+# Everything is optional; anything you leave out keeps its default.
+
+# Fish colours are chosen from this list by process name (stable per name).
+palette = [
+    "#ff8a65", # coral
+    "#81c784", # green
+    "#4dd0e1", # cyan
+    "#64b5f6", # blue
+    "#ba68c8", # purple
+    "#f06292", # pink
+]
+
+[sprites]
+# Four fish, smallest to largest. The eye glyph (`o` or `°`) becomes the zombie
+# cross when a process dies.
+fish = ["><>", "><(°>", "><((°>", "><(((°>"]
+fish_ascii = ["><>", "><(o>", "><((o>", "><(((o>"]
+# Kernel threads (shown with --kernel) and container processes.
+crab = "><°°><"
+jellyfish = "~(°°)~"

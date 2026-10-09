@@ -1,10 +1,22 @@
 //! Fish sprites per size class, with mirroring and zombie/ASCII variants.
+//!
+//! The built-in set lives in [`Sprites::default`]; a theme file can replace any
+//! of it.
 
 /// Right-facing sprite per size class, in the default (Unicode) style.
 pub const RIGHT: [&str; 4] = ["><>", "><(°>", "><((°>", "><(((°>"];
 
 /// Right-facing sprite per size class, in ASCII style.
 pub const RIGHT_ASCII: [&str; 4] = ["><>", "><(o>", "><((o>", "><(((o>"];
+
+/// The default crab (a kernel thread).
+pub const CRAB: &str = "><°°><";
+/// The default ASCII crab.
+pub const CRAB_ASCII: &str = "><oo><";
+/// The default jellyfish (a container process).
+pub const JELLYFISH: &str = "~(°°)~";
+/// The default ASCII jellyfish.
+pub const JELLYFISH_ASCII: &str = "~(oo)~";
 
 /// Mirror a right-facing sprite into a left-facing one by swapping the bracket
 /// and arrow characters. The eye is symmetric and passes through unchanged.
@@ -43,66 +55,112 @@ fn replace_eye(chars: &mut [char], new_eye: char) {
     }
 }
 
-/// Build the final sprite: size class 0..=3, facing and zombie/ASCII variants.
-#[cfg(test)]
-pub fn sprite(size: u8, facing_left: bool, ascii: bool, zombie: bool) -> Vec<char> {
-    let mut out = Vec::with_capacity(8);
-    sprite_into(&mut out, size, facing_left, ascii, zombie);
-    out
+/// The full set of sprites, replacing the built-in ones only where a theme
+/// overrides them.
+#[derive(Debug, Clone)]
+pub struct Sprites {
+    pub fish: [String; 4],
+    pub fish_ascii: [String; 4],
+    pub crab: String,
+    pub crab_ascii: String,
+    pub jellyfish: String,
+    pub jellyfish_ascii: String,
 }
 
-/// Like [`sprite`], but reusing a caller-owned buffer so rendering does not
-/// allocate per fish per frame.
-pub fn sprite_into(out: &mut Vec<char>, size: u8, facing_left: bool, ascii: bool, zombie: bool) {
-    out.clear();
-    let size = size.min(3) as usize;
-    let base = if ascii {
-        RIGHT_ASCII[size]
-    } else {
-        RIGHT[size]
-    };
-    out.extend(base.chars());
-    replace_eye(out, eye(ascii, zombie));
-    if facing_left {
-        let mirrored = mirror(out);
-        *out = mirrored;
+impl Default for Sprites {
+    fn default() -> Self {
+        Self {
+            fish: RIGHT.map(str::to_string),
+            fish_ascii: RIGHT_ASCII.map(str::to_string),
+            crab: CRAB.to_string(),
+            crab_ascii: CRAB_ASCII.to_string(),
+            jellyfish: JELLYFISH.to_string(),
+            jellyfish_ascii: JELLYFISH_ASCII.to_string(),
+        }
     }
 }
 
-/// A dying fish: zombie eye, tail removed, mirrored as needed.
-pub fn dead_sprite_into(out: &mut Vec<char>, size: u8, facing_left: bool, ascii: bool) {
-    sprite_into(out, size, false, ascii, true);
-    if !out.is_empty() {
-        out.remove(0);
+impl Sprites {
+    fn fish_base(&self, size: u8, ascii: bool) -> &str {
+        let size = size.min(3) as usize;
+        if ascii {
+            &self.fish_ascii[size]
+        } else {
+            &self.fish[size]
+        }
     }
-    if facing_left {
-        let mirrored = mirror(out);
-        *out = mirrored;
+
+    /// Build a fish sprite into `out`, reusing the buffer.
+    pub fn fish_into(
+        &self,
+        out: &mut Vec<char>,
+        size: u8,
+        facing_left: bool,
+        ascii: bool,
+        zombie: bool,
+    ) {
+        out.clear();
+        out.extend(self.fish_base(size, ascii).chars());
+        replace_eye(out, eye(ascii, zombie));
+        if facing_left {
+            let mirrored = mirror(out);
+            *out = mirrored;
+        }
     }
-}
 
-const CRAB: &str = "><°°><";
-const CRAB_ASCII: &str = "><oo><";
-const JELLYFISH: &str = "~(°°)~";
-const JELLYFISH_ASCII: &str = "~(oo)~";
+    /// A dying fish: zombie eye, tail removed, mirrored as needed.
+    pub fn dead_fish_into(&self, out: &mut Vec<char>, size: u8, facing_left: bool, ascii: bool) {
+        self.fish_into(out, size, false, ascii, true);
+        if !out.is_empty() {
+            out.remove(0);
+        }
+        if facing_left {
+            let mirrored = mirror(out);
+            *out = mirrored;
+        }
+    }
 
-/// A crab (kernel thread). Crabs walk sideways, so there is no facing.
-pub fn crab_into(out: &mut Vec<char>, ascii: bool, zombie: bool) {
-    out.clear();
-    out.extend(if ascii { CRAB_ASCII } else { CRAB }.chars());
-    replace_eye(out, eye(ascii, zombie));
-}
+    /// A crab. Crabs walk sideways, so there is no facing.
+    pub fn crab_into(&self, out: &mut Vec<char>, ascii: bool, zombie: bool) {
+        out.clear();
+        out.extend(if ascii { &self.crab_ascii } else { &self.crab }.chars());
+        replace_eye(out, eye(ascii, zombie));
+    }
 
-/// A jellyfish (container process).
-pub fn jellyfish_into(out: &mut Vec<char>, ascii: bool, zombie: bool) {
-    out.clear();
-    out.extend(if ascii { JELLYFISH_ASCII } else { JELLYFISH }.chars());
-    replace_eye(out, eye(ascii, zombie));
+    /// A jellyfish.
+    pub fn jellyfish_into(&self, out: &mut Vec<char>, ascii: bool, zombie: bool) {
+        out.clear();
+        out.extend(
+            if ascii {
+                &self.jellyfish_ascii
+            } else {
+                &self.jellyfish
+            }
+            .chars(),
+        );
+        replace_eye(out, eye(ascii, zombie));
+    }
+
+    /// Every sprite has to be non-empty, otherwise nothing would be drawn.
+    pub fn is_valid(&self) -> bool {
+        self.fish.iter().all(|s| !s.is_empty())
+            && self.fish_ascii.iter().all(|s| !s.is_empty())
+            && !self.crab.is_empty()
+            && !self.crab_ascii.is_empty()
+            && !self.jellyfish.is_empty()
+            && !self.jellyfish_ascii.is_empty()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sprite(size: u8, facing_left: bool, ascii: bool, zombie: bool) -> Vec<char> {
+        let mut out = Vec::new();
+        Sprites::default().fish_into(&mut out, size, facing_left, ascii, zombie);
+        out
+    }
 
     #[test]
     fn mirror_swaps_brackets_and_arrows() {
@@ -156,26 +214,27 @@ mod tests {
     #[test]
     fn dead_sprite_drops_the_tail_and_uses_a_zombie_eye() {
         let mut out = Vec::new();
-        dead_sprite_into(&mut out, 2, false, false);
+        Sprites::default().dead_fish_into(&mut out, 2, false, false);
         assert_eq!(out, "<((✕>".chars().collect::<Vec<_>>());
 
         let mut mirrored = Vec::new();
-        dead_sprite_into(&mut mirrored, 2, true, false);
+        Sprites::default().dead_fish_into(&mut mirrored, 2, true, false);
         assert_eq!(mirrored, ">))✕<".chars().collect::<Vec<_>>());
     }
 
     #[test]
     fn crab_and_jellyfish_sprites() {
+        let s = Sprites::default();
         let mut crab = Vec::new();
-        crab_into(&mut crab, false, false);
+        s.crab_into(&mut crab, false, false);
         assert_eq!(crab, "><°°><".chars().collect::<Vec<_>>());
-        crab_into(&mut crab, true, true);
+        s.crab_into(&mut crab, true, true);
         assert_eq!(crab, "><xx><".chars().collect::<Vec<_>>());
 
         let mut jelly = Vec::new();
-        jellyfish_into(&mut jelly, false, false);
+        s.jellyfish_into(&mut jelly, false, false);
         assert_eq!(jelly, "~(°°)~".chars().collect::<Vec<_>>());
-        jellyfish_into(&mut jelly, true, true);
+        s.jellyfish_into(&mut jelly, true, true);
         assert_eq!(jelly, "~(xx)~".chars().collect::<Vec<_>>());
     }
 
@@ -197,5 +256,18 @@ mod tests {
             sprite(0, true, false, true),
             "<><".chars().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn custom_sprites_are_used() {
+        let mut s = Sprites::default();
+        s.fish[0] = ">>>".to_string();
+        let mut out = Vec::new();
+        s.fish_into(&mut out, 0, false, false, false);
+        assert_eq!(out, ">>>".chars().collect::<Vec<_>>());
+        assert!(s.is_valid());
+
+        s.crab = String::new();
+        assert!(!s.is_valid());
     }
 }

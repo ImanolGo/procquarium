@@ -57,8 +57,12 @@ pub fn fnv1a(input: &str) -> u64 {
 }
 
 /// Colour for a process name; the same name always gets the same colour.
-pub fn color_for_name(name: &str) -> Color {
-    PALETTE[(fnv1a(name) % PALETTE.len() as u64) as usize]
+/// Falls back to the first default colour if the palette is empty.
+pub fn color_for_name(name: &str, palette: &[Color]) -> Color {
+    if palette.is_empty() {
+        return PALETTE[0];
+    }
+    palette[(fnv1a(name) % palette.len() as u64) as usize]
 }
 
 #[cfg(test)]
@@ -91,8 +95,16 @@ mod tests {
 
     #[test]
     fn colour_is_stable_and_in_palette() {
-        assert_eq!(color_for_name("firefox"), color_for_name("firefox"));
-        assert!(PALETTE.contains(&color_for_name("firefox")));
+        let p = PALETTE.to_vec();
+        assert_eq!(color_for_name("firefox", &p), color_for_name("firefox", &p));
+        assert!(PALETTE.contains(&color_for_name("firefox", &p)));
+    }
+
+    #[test]
+    fn colour_uses_a_custom_palette_and_handles_empty() {
+        let custom = [Color::Rgb(1, 2, 3)];
+        assert_eq!(color_for_name("firefox", &custom), Color::Rgb(1, 2, 3));
+        assert_eq!(color_for_name("firefox", &[]), PALETTE[0]);
     }
 
     #[test]
