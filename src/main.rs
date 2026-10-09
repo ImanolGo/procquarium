@@ -6,7 +6,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use clap::Parser;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+};
+use crossterm::execute;
 use rand::Rng;
 
 use procquarium::app::App;
@@ -110,7 +113,25 @@ fn main() -> Result<()> {
 
     let seed = config.seed.unwrap_or_else(|| rand::rng().random());
     let mut terminal = ratatui::init();
+
+    // In screensaver mode any mouse event exits, which only works if the
+    // terminal actually reports them. Capture the mouse just for that mode, and
+    // make sure we release it on the way out (including a panic).
+    let mouse = config.screensaver;
+    if mouse {
+        let _ = execute!(std::io::stdout(), EnableMouseCapture);
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = execute!(std::io::stdout(), DisableMouseCapture);
+            previous(info);
+        }));
+    }
+
     let result = run(&mut terminal, source, config, seed);
+
+    if mouse {
+        let _ = execute!(std::io::stdout(), DisableMouseCapture);
+    }
     ratatui::restore();
     result
 }
