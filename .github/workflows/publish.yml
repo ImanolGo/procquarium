@@ -1,8 +1,13 @@
 name: Publish to crates.io
 
-# Publishes the crate on a version tag, using crates.io Trusted Publishing:
-# a GitHub OIDC token is exchanged for a short-lived crates.io token, so no
-# long-lived CARGO_REGISTRY_TOKEN secret is needed.
+# Publishes the crate on crates.io Trusted Publishing: a GitHub OIDC token is
+# exchanged for a short-lived crates.io token, so no long-lived
+# CARGO_REGISTRY_TOKEN secret is needed.
+#
+# It waits for the Release workflow to finish successfully instead of running
+# on the tag itself, so a tag whose Windows (or any other) build fails never
+# reaches crates.io. A `workflow_run` on the tag push is the trigger; the job
+# only runs for a successful push, and skips pull-request runs of Release.
 #
 # One-time setup on crates.io (required before this works):
 #   https://crates.io/crates/procquarium/settings -> Trusted Publishing
@@ -12,9 +17,15 @@ name: Publish to crates.io
 # If you would rather use a token, delete the auth step and set the
 # CARGO_REGISTRY_TOKEN repository secret instead.
 on:
-  push:
-    tags: ["v[0-9]*"]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v0.4.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -23,8 +34,13 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Only publish after a successful tag-triggered Release run, or when
+    # dispatched by hand. Pull-request runs of Release are ignored.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_sha }}
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Authenticate with crates.io

@@ -148,10 +148,12 @@ The tag drives the rest:
   and the shell/PowerShell/MSI installers, and creates the GitHub Release.
 - **Debian package** builds the `.deb` and attaches it (it waits for the
   release to appear first).
-- **Publish to crates.io** publishes the crate through Trusted Publishing
-  (OIDC); the one-time crates.io setup is documented in
+- **Publish to crates.io** waits for the Release workflow to succeed, then
+  publishes the crate through Trusted Publishing (OIDC), so a failed build never
+  reaches crates.io. The one-time crates.io setup is documented in
   `.github/workflows/publish.yml`.
-- **CI** runs fmt/clippy/tests on branch pushes.
+- **CI** runs fmt/clippy/tests on branch pushes, plus `cargo publish --dry-run`
+  so a broken package is caught before the tag.
 
 docs.rs builds once the crate is on crates.io.
 
