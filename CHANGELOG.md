@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-10-09
+
+### Fixed
+
+- Left-facing fish are mirrored correctly: `mirror` now reverses the glyphs
+  as well as swapping them.
+- A selected process that enters the top N without a change of its own (a
+  bigger one exited) now gets a fish instead of leaving an empty slot.
+- Creatures are matched by `(pid, start_time)`, so a reused PID gets a fresh
+  fish while the old one is still floating up.
+- Mouse events reach `--screensaver` (the mouse is now captured), so moving or
+  clicking the mouse exits as the README promises.
+- `--interval` no longer panics on huge values and rejects values below
+  sysinfo's minimum; `--max-fish` is limited to 1..=500.
+- Feeding caps its priority nudge at two steps and restores the original nice
+  value when a fish leaves or on exit.
+
+### Changed
+
+- Sampling (and renice) runs on a background thread, so a slow sample no longer
+  hitches a frame or flashes a "slow sample" message.
+- Hysteresis at the top-N cut-off stops fish churning when processes swap
+  places around the boundary.
+- Eggs mean "just started" again: the first sample places fish at depth, a
+  promoted process swims in from a wall, and only real births lay eggs.
+- `Config` is built with `Config::builder()` instead of ten positional
+  arguments.
+
+### Added
+
+- `NO_COLOR` support.
+
 ## [0.2.5] - 2026-10-09
 
 ### Fixed
@@ -105,7 +137,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.3
