@@ -45,3 +45,18 @@ codegen-units = 1
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# Metadata for `cargo deb` (the .deb attached to each release).
+[package.metadata.deb]
+maintainer = "ImanolGo <ImanolGo@users.noreply.github.com>"
+copyright = "2026, ImanolGo"
+license-file = ["LICENSE", "4"]
+section = "utils"
+priority = "optional"
+depends = "$auto"
+extended-description = "A terminal aquarium where every fish is a process: size follows resident memory, speed follows CPU, and colour follows the process name."
+assets = [
+    ["target/release/procquarium", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/procquarium/README.md", "644"],
+    ["procquarium.example.toml", "usr/share/doc/procquarium/config.toml.example", "644"],
+]

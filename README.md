@@ -44,6 +44,15 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/ImanolGo/procquari
 
 There is also a `.msi` for Windows and `.tar.xz` archives for each platform.
 
+### Debian / Ubuntu
+
+Each release includes an `amd64` `.deb` built by `cargo-deb`:
+
+```sh
+# download the procquarium_*.deb from the latest release, then:
+sudo apt install ./procquarium_*.deb
+```
+
 ### With a Rust toolchain
 
 ```sh
