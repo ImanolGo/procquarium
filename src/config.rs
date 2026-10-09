@@ -52,6 +52,22 @@ impl Config {
         if !interval_secs.is_finite() || interval_secs <= 0.0 {
             bail!("--interval must be a positive number of seconds");
         }
+        let interval = Duration::try_from_secs_f64(interval_secs)
+            .map_err(|_| anyhow::anyhow!("--interval is too large"))?;
+        if interval < sysinfo::MINIMUM_CPU_UPDATE_INTERVAL {
+            bail!(
+                "--interval must be at least {} ms: sysinfo needs two samples close \
+                 together before CPU numbers are meaningful",
+                sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_millis()
+            );
+        }
+        if interval > Duration::from_secs(3600) {
+            bail!("--interval must be at most 3600 seconds");
+        }
+        if !(1..=500).contains(&max_fish) {
+            bail!("--max-fish must be between 1 and 500");
+        }
+
         let filter = match filter {
             Some(pattern) => Some(
                 Regex::new(&pattern)
@@ -61,7 +77,7 @@ impl Config {
         };
 
         Ok(Self {
-            interval: Duration::from_secs_f64(interval_secs),
+            interval,
             max_fish,
             user: user.filter(|u| !u.is_empty()),
             filter,
@@ -95,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_positive_interval() {
+    fn rejects_bad_intervals() {
         let bad = |secs| {
             Config::new(
                 secs, 60, None, None, false, false, false, false, None, false,
@@ -104,6 +120,34 @@ mod tests {
         };
         assert!(bad(0.0));
         assert!(bad(-1.0));
+        assert!(bad(1e20), "must not panic on overflow");
+        assert!(bad(f64::NAN));
+        assert!(bad(0.1), "below the sysinfo minimum");
+        assert!(bad(9999.0), "above the maximum");
+        // The sysinfo minimum itself is accepted.
+        assert!(
+            Config::new(
+                sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_secs_f64(),
+                60,
+                None,
+                None,
+                false,
+                false,
+                false,
+                false,
+                None,
+                false,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn rejects_out_of_range_max_fish() {
+        let bad =
+            |n| Config::new(1.0, n, None, None, false, false, false, false, None, false).is_err();
+        assert!(bad(0));
+        assert!(bad(501));
     }
 
     #[test]
