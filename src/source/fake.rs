@@ -1,0 +1,97 @@
+//! Scripted [`ProcessSource`] used by tests.
+
+use std::collections::HashMap;
+
+use anyhow::Result;
+
+use super::{ProcInfo, ProcStatus, ProcessSource, Snapshot};
+
+/// Returns previously scripted snapshots in order. Once the script runs out it
+/// keeps returning the last snapshot, which makes it easy to hold a steady
+/// state for a rendering test.
+#[derive(Debug, Clone, Default)]
+pub struct FakeSource {
+    snapshots: Vec<Snapshot>,
+    index: usize,
+}
+
+impl FakeSource {
+    pub fn new(snapshots: Vec<Snapshot>) -> Self {
+        Self {
+            snapshots,
+            index: 0,
+        }
+    }
+}
+
+impl ProcessSource for FakeSource {
+    fn snapshot(&mut self) -> Result<Snapshot> {
+        let snap = self.snapshots.get(self.index).cloned().unwrap_or_default();
+        if self.index + 1 < self.snapshots.len() {
+            self.index += 1;
+        }
+        Ok(snap)
+    }
+}
+
+/// Build a snapshot from a list of processes, keyed by pid.
+pub fn snapshot(procs: Vec<ProcInfo>) -> Snapshot {
+    Snapshot::new(
+        procs
+            .into_iter()
+            .map(|p| (p.pid, p))
+            .collect::<HashMap<_, _>>(),
+    )
+}
+
+/// Fluent builder for test processes.
+pub fn proc(pid: u32, name: &str) -> ProcInfo {
+    ProcInfo {
+        pid,
+        parent: None,
+        name: name.to_string(),
+        cpu: 0.0,
+        memory: 0,
+        status: ProcStatus::Sleeping,
+        user: None,
+        start_time: 1,
+    }
+}
+
+impl ProcInfo {
+    pub fn with_cpu(mut self, cpu: f32) -> Self {
+        self.cpu = cpu;
+        self
+    }
+
+    pub fn with_parent(mut self, parent: u32) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn with_start_time(mut self, start_time: u64) -> Self {
+        self.start_time = start_time;
+        self
+    }
+
+    pub fn with_status(mut self, status: ProcStatus) -> Self {
+        self.status = status;
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fake_source_plays_snapshots_in_order() {
+        let a = snapshot(vec![proc(1, "a")]);
+        let b = snapshot(vec![proc(2, "b")]);
+        let mut source = FakeSource::new(vec![a.clone(), b.clone()]);
+        assert_eq!(source.snapshot().expect("sample"), a);
+        assert_eq!(source.snapshot().expect("sample"), b);
+        // The script is exhausted, so it keeps the last snapshot.
+        assert_eq!(source.snapshot().expect("sample"), b);
+    }
+}
