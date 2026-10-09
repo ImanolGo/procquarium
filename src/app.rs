@@ -1,6 +1,7 @@
 //! Application state: the tank plus everything the UI needs.
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use crate::config::Config;
 use crate::diff;
@@ -29,6 +30,9 @@ pub struct App {
     pending_boosts: Vec<(u32, u64)>,
     /// Processes that left and whose priority nudge should be undone.
     pending_restores: Vec<(u32, u64)>,
+    /// How many consecutive samples each incumbent fish has been outranked, for
+    /// the cut-off hysteresis.
+    streaks: HashMap<(u32, u64), u8>,
 }
 
 impl App {
@@ -48,13 +52,35 @@ impl App {
             self_user: None,
             pending_boosts: Vec::new(),
             pending_restores: Vec::new(),
+            streaks: HashMap::new(),
         }
     }
 
     /// Feed a fresh snapshot: diff it, pick the top processes, and update the tank.
     pub fn apply_snapshot(&mut self, snapshot: Snapshot) {
         let events = diff::diff(&self.prev, &snapshot);
-        let selected = select_procs(&snapshot, &self.config);
+
+        // Rank, then apply cut-off hysteresis so processes near the boundary
+        // don't leave and re-hatch every sample.
+        let ranked = rank_procs(&snapshot, &self.config, false);
+        let incumbents = self.tank.resident_identities();
+        let (mut selected, streaks) = select_with_hysteresis(
+            &ranked,
+            &incumbents,
+            &self.streaks,
+            self.config.max_fish,
+            HYSTERESIS_MARGIN,
+            HYSTERESIS_STREAK,
+        );
+        self.streaks = streaks;
+        if self.config.kernel {
+            selected.extend(
+                rank_procs(&snapshot, &self.config, true)
+                    .into_iter()
+                    .take(CRAB_LIMIT),
+            );
+        }
+
         self.tank.apply(&events, &selected);
         self.load = snapshot.load;
         self.self_user = snapshot
@@ -149,48 +175,46 @@ impl App {
 /// near zero, so without a reserved slot they would never win a fish.
 const CRAB_LIMIT: usize = 6;
 
-/// Choose which processes appear: apply the filters, rank ordinary processes by
-/// score and keep the top `max_fish`. With `--kernel`, a handful of kernel
-/// threads are added as crabs beyond the fish budget. Pure, so easy to test.
-pub fn select_procs(snapshot: &Snapshot, config: &Config) -> Vec<ProcInfo> {
+/// How much better a newcomer must be than an incumbent to take its slot, and
+/// how many samples an outranked incumbent keeps its place regardless.
+const HYSTERESIS_MARGIN: f32 = 0.2;
+const HYSTERESIS_STREAK: u8 = 3;
+
+/// The filtered, ranked candidates of one kind, best first. Pure.
+pub fn rank_procs(snapshot: &Snapshot, config: &Config, kernel: bool) -> Vec<ProcInfo> {
     let passes = |p: &ProcInfo| -> bool {
-        config
-            .user
-            .as_ref()
-            .is_none_or(|user| p.user.as_deref() == Some(user.as_str()))
+        p.kernel == kernel
+            && config
+                .user
+                .as_ref()
+                .is_none_or(|user| p.user.as_deref() == Some(user.as_str()))
             && config.filter.as_ref().is_none_or(|re| re.is_match(&p.name))
     };
 
-    let mut fish: Vec<&ProcInfo> = snapshot
-        .procs
-        .values()
-        .filter(|p| !p.kernel && passes(p))
-        .collect();
-    fish.sort_by(|a, b| {
+    let mut ranked: Vec<&ProcInfo> = snapshot.procs.values().filter(|p| passes(p)).collect();
+    ranked.sort_by(|a, b| {
         b.score()
             .partial_cmp(&a.score())
             .unwrap_or(Ordering::Equal)
             .then_with(|| a.pid.cmp(&b.pid))
     });
-    fish.truncate(config.max_fish);
+    ranked.into_iter().cloned().collect()
+}
 
-    let mut selected: Vec<ProcInfo> = fish.into_iter().cloned().collect();
-
+/// Choose which processes appear: rank ordinary processes by score and keep the
+/// top `max_fish`. With `--kernel`, a handful of kernel threads are added as
+/// crabs beyond the fish budget. No hysteresis; see
+/// [`select_with_hysteresis`] for that. Pure, so easy to test.
+pub fn select_procs(snapshot: &Snapshot, config: &Config) -> Vec<ProcInfo> {
+    let mut selected = rank_procs(snapshot, config, false);
+    selected.truncate(config.max_fish);
     if config.kernel {
-        let mut crabs: Vec<&ProcInfo> = snapshot
-            .procs
-            .values()
-            .filter(|p| p.kernel && passes(p))
-            .collect();
-        crabs.sort_by(|a, b| {
-            b.score()
-                .partial_cmp(&a.score())
-                .unwrap_or(Ordering::Equal)
-                .then_with(|| a.pid.cmp(&b.pid))
-        });
-        selected.extend(crabs.into_iter().take(CRAB_LIMIT).cloned());
+        selected.extend(
+            rank_procs(snapshot, config, true)
+                .into_iter()
+                .take(CRAB_LIMIT),
+        );
     }
-
     selected
 }
 
@@ -200,6 +224,86 @@ pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
         .into_iter()
         .map(|p| p.pid)
         .collect()
+}
+
+/// Pick `max_fish` from `ranked` (best first), keeping incumbents in place
+/// unless a newcomer beats the weakest of them by `margin`, or that incumbent
+/// has been outranked for `max_streak` samples in a row. Returns the selection
+/// and the updated streak bookkeeping. Pure.
+pub fn select_with_hysteresis(
+    ranked: &[ProcInfo],
+    incumbents: &std::collections::HashSet<(u32, u64)>,
+    streaks: &std::collections::HashMap<(u32, u64), u8>,
+    max_fish: usize,
+    margin: f32,
+    max_streak: u8,
+) -> (Vec<ProcInfo>, std::collections::HashMap<(u32, u64), u8>) {
+    use std::collections::HashMap;
+
+    // Update streaks: an incumbent is "outranked" when a non-incumbent scores
+    // higher than it does this sample.
+    let best_newcomer = ranked
+        .iter()
+        .find(|p| !incumbents.contains(&p.identity()))
+        .map(|p| p.score())
+        .unwrap_or(f32::NEG_INFINITY);
+    let mut new_streaks: HashMap<(u32, u64), u8> = HashMap::new();
+    for p in ranked {
+        if incumbents.contains(&p.identity()) {
+            let previous = streaks.get(&p.identity()).copied().unwrap_or(0);
+            let streak = if p.score() < best_newcomer {
+                previous.saturating_add(1)
+            } else {
+                0
+            };
+            new_streaks.insert(p.identity(), streak);
+        }
+    }
+
+    // Keep incumbents first, then fill any free slots with the best newcomers.
+    let mut selected: Vec<&ProcInfo> = ranked
+        .iter()
+        .filter(|p| incumbents.contains(&p.identity()))
+        .take(max_fish)
+        .collect();
+    for p in ranked {
+        if selected.len() >= max_fish {
+            break;
+        }
+        if !incumbents.contains(&p.identity()) {
+            selected.push(p);
+        }
+    }
+
+    // A newcomer may evict the weakest incumbent only with a clear margin, or
+    // if that incumbent has been outranked for long enough.
+    if selected.len() >= max_fish {
+        for newcomer in ranked
+            .iter()
+            .filter(|p| !incumbents.contains(&p.identity()))
+        {
+            let weakest = selected
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| incumbents.contains(&s.identity()))
+                .min_by(|a, b| {
+                    a.1.score()
+                        .partial_cmp(&b.1.score())
+                        .unwrap_or(Ordering::Equal)
+                })
+                .map(|(i, _)| i);
+            let Some(index) = weakest else { break };
+            let incumbent = selected[index];
+            let streak = new_streaks.get(&incumbent.identity()).copied().unwrap_or(0);
+            if newcomer.score() > incumbent.score() * (1.0 + margin) || streak >= max_streak {
+                selected[index] = newcomer;
+            } else {
+                break;
+            }
+        }
+    }
+
+    (selected.into_iter().cloned().collect(), new_streaks)
 }
 
 /// Whether we are allowed to touch this process's priority: only our own.
@@ -217,6 +321,67 @@ mod tests {
 
     fn config() -> Config {
         Config::new(1.0, 60, None, None, false, false, false, false, None, false).expect("valid")
+    }
+
+    fn config_max(n: usize) -> Config {
+        Config::new(1.0, n, None, None, false, false, false, false, None, false).expect("valid")
+    }
+
+    #[test]
+    fn no_churn_when_two_processes_oscillate_at_the_cutoff() {
+        // max_fish = 1 and two processes trade places just above/below each
+        // other. Without hysteresis they'd leave and re-hatch every sample.
+        let mut app = App::new(config_max(1), 80, 24, 1);
+        let mut resident: Option<u32> = None;
+        let mut changes = 0;
+        for i in 0..12 {
+            let (a, b) = if i % 2 == 0 {
+                (50.0, 51.0)
+            } else {
+                (51.0, 50.0)
+            };
+            app.apply_snapshot(snapshot(vec![
+                proc(1, "a").with_cpu(a),
+                proc(2, "b").with_cpu(b),
+            ]));
+            for _ in 0..20 {
+                app.update(0.01);
+            }
+            let now = app
+                .tank
+                .fish
+                .iter()
+                .find(|f| f.state != crate::tank::fish::FishState::Exiting)
+                .map(|f| f.pid);
+            if let (Some(prev), Some(cur)) = (resident, now)
+                && prev != cur
+            {
+                changes += 1;
+            }
+            if now.is_some() {
+                resident = now;
+            }
+        }
+        assert_eq!(changes, 0, "the incumbent should keep its slot");
+        assert_eq!(app.tank.living_count(), 1);
+    }
+
+    #[test]
+    fn a_much_smaller_incumbent_is_replaced_by_a_much_bigger_newcomer() {
+        let mut app = App::new(config_max(1), 80, 24, 1);
+        app.apply_snapshot(snapshot(vec![proc(1, "small").with_cpu(10.0)]));
+        for _ in 0..20 {
+            app.update(0.01);
+        }
+        // A process far bigger than the incumbent should take the slot.
+        app.apply_snapshot(snapshot(vec![
+            proc(1, "small").with_cpu(10.0),
+            proc(2, "big").with_cpu(200.0),
+        ]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        assert!(app.tank.fish.iter().any(|f| f.pid == 2 && !f.finished()));
     }
 
     #[test]

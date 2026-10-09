@@ -254,6 +254,17 @@ impl Tank {
             .count()
     }
 
+    /// Identities currently occupying the tank (living creatures and eggs).
+    /// Used to keep incumbents in place across samples.
+    pub fn resident_identities(&self) -> HashSet<(u32, u64)> {
+        self.fish
+            .iter()
+            .filter(|f| f.state != FishState::Exiting)
+            .map(|f| f.identity())
+            .chain(self.eggs.iter().map(|e| e.info.identity()))
+            .collect()
+    }
+
     /// Advance the whole tank by `dt` seconds.
     pub fn update(&mut self, dt: f32) {
         self.time += dt;
