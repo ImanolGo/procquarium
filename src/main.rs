@@ -15,6 +15,7 @@ use rand::Rng;
 use procquarium::app::App;
 use procquarium::config::Config;
 use procquarium::render::{self, human_bytes};
+use procquarium::sampler;
 use procquarium::source::sysinfo_source::SysinfoSource;
 use procquarium::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
 use procquarium::theme;
@@ -104,10 +105,9 @@ fn main() -> Result<()> {
         cli.dump,
     )?;
 
-    let mut source = SysinfoSource::new();
-
     if config.dump {
         // Give the CPU counters a moment to become meaningful.
+        let mut source = SysinfoSource::new();
         std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
         let snapshot = source.snapshot()?;
         print_dump(&snapshot);
@@ -132,10 +132,7 @@ fn main() -> Result<()> {
         }));
     }
 
-    let result = run(&mut terminal, &mut source, config, seed);
-
-    // Put back any priorities we changed before leaving.
-    source.restore_all_priorities();
+    let result = run(&mut terminal, config, seed);
 
     if mouse {
         let _ = execute!(std::io::stdout(), DisableMouseCapture);
@@ -144,37 +141,34 @@ fn main() -> Result<()> {
     result
 }
 
-fn run(
-    terminal: &mut ratatui::DefaultTerminal,
-    source: &mut SysinfoSource,
-    config: Config,
-    seed: u64,
-) -> Result<()> {
+fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Result<()> {
+    let interval = config.interval;
+    // Dropping the sampler stops its thread and restores any priorities it set.
+    let sampler = sampler::Sampler::spawn(interval)?;
+
     let size = terminal.size()?;
     let mut app = App::new(config, size.width, size.height, seed);
-    let interval = app.config.interval;
     let screensaver = app.config.screensaver;
     let frame_target = Duration::from_millis(33);
 
     let mut last_frame = Instant::now();
-    let mut last_sample = Instant::now();
     // Only warn once per run when the kernel refuses to change priorities.
     let mut renice_denied = false;
 
     loop {
-        // Sample the process table on its own timer.
-        if last_sample.elapsed() >= interval {
-            let started = Instant::now();
-            match source.snapshot() {
-                Ok(snapshot) => app.apply_snapshot(snapshot),
-                Err(error) => app.status = Some(format!("sample error: {error}")),
-            }
-            last_sample = Instant::now();
-            let took = started.elapsed();
-            if took > Duration::from_millis(50) {
-                // Recorded rather than logged: a slow sample is worth watching
-                // but must not interrupt the picture.
-                app.status = Some(format!("slow sample: {} ms", took.as_millis()));
+        // Take whatever the sampling thread has produced since last frame.
+        while let Some(ev) = sampler.try_recv() {
+            match ev {
+                sampler::Event::Snapshot(snapshot) => app.apply_snapshot(snapshot),
+                sampler::Event::Boost(PriorityBoost::Denied) if !renice_denied => {
+                    renice_denied = true;
+                    app.status =
+                        Some("could not renice (need privileges); feeding has no effect".into());
+                }
+                sampler::Event::Boost(_) => {}
+                sampler::Event::Error(error) => {
+                    app.status = Some(format!("sample error: {error}"));
+                }
             }
         }
 
@@ -198,17 +192,12 @@ fn run(
         last_frame = now;
         app.update(dt);
 
-        // Apply any priority nudges the tank earned this frame, and undo those
-        // for processes that have left. The "denied" note is shown once.
+        // Hand priority work to the sampling thread so the frame never blocks.
         for id in app.take_pending_boosts() {
-            if source.boost_priority(id) == PriorityBoost::Denied && !renice_denied {
-                renice_denied = true;
-                app.status =
-                    Some("could not renice (need privileges); feeding has no effect".into());
-            }
+            sampler.boost(id);
         }
         for id in app.take_pending_restores() {
-            source.restore_priority(id);
+            sampler.restore(id);
         }
 
         terminal.draw(|frame| render::draw(frame, &app))?;

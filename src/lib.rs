@@ -12,6 +12,7 @@ pub mod app;
 pub mod config;
 pub mod diff;
 pub mod render;
+pub mod sampler;
 pub mod source;
 pub mod tank;
 pub mod theme;
