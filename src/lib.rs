@@ -19,6 +19,8 @@
 #[doc(hidden)]
 pub mod app;
 #[doc(hidden)]
+pub mod cli;
+#[doc(hidden)]
 pub mod config;
 #[doc(hidden)]
 pub mod diff;

@@ -61,4 +61,12 @@ assets = [
     ["target/release/procquarium", "usr/bin/", "755"],
     ["README.md", "usr/share/doc/procquarium/README.md", "644"],
     ["procquarium.example.toml", "usr/share/doc/procquarium/config.toml.example", "644"],
+    ["man/procquarium.1", "usr/share/man/man1/", "644"],
+    ["completions/procquarium.bash", "usr/share/bash-completion/completions/procquarium", "644"],
+    ["completions/_procquarium", "usr/share/zsh/vendor-completions/_procquarium", "644"],
+    ["completions/procquarium.fish", "usr/share/fish/vendor_completions.d/procquarium.fish", "644"],
 ]
+
+[workspace]
+members = [".", "xtask"]
+resolver = "3"

@@ -29,16 +29,24 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test --workspace --all-targets
 
       # Make sure the crate still packages and would publish; catches a bad
       # include/exclude list before a release tag does.
       - name: cargo publish --dry-run
         if: matrix.os == 'ubuntu-latest'
         run: cargo publish --dry-run
+
+      # The man page and completions are generated from the clap definition and
+      # committed; fail if the committed copy is stale.
+      - name: Check generated man page and completions
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo run -p xtask
+          git diff --exit-code -- man completions
 
   msrv:
     name: msrv (1.95.0)

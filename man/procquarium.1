@@ -1,0 +1,100 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH procquarium 1  "procquarium 0.3.2" 
+.SH NAME
+procquarium \- Your running processes, as fish.
+.SH SYNOPSIS
+\fBprocquarium\fR [\fB\-\-interval\fR] [\fB\-\-max\-fish\fR] [\fB\-\-user\fR] [\fB\-\-filter\fR] [\fB\-\-kernel\fR] [\fB\-\-ascii\fR] [\fB\-\-screensaver\fR] [\fB\-\-feed\fR] [\fB\-\-seed\fR] [\fB\-\-config\fR] [\fB\-\-no\-mouse\fR] [\fB\-\-record\fR] [\fB\-\-replay\fR] [\fB\-\-kill\fR] [\fB\-\-colors\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+A terminal aquarium where every fish is a process on your machine. Big fish use a lot of memory, fast fish are burning CPU, and when a process exits its fish quietly floats to the surface. Leave it running in a spare pane, or use it as a screensaver.
+.SH OPTIONS
+.TP
+\fB\-\-interval\fR \fI<SECS>\fR
+Seconds between process samples
+.TP
+\fB\-\-max\-fish\fR \fI<N>\fR
+Maximum number of fish in the tank
+.TP
+\fB\-\-user\fR \fI<USER>\fR
+Only show processes owned by this user
+.TP
+\fB\-\-filter\fR \fI<REGEX>\fR
+Only show processes whose name matches this regex
+.TP
+\fB\-\-kernel\fR
+Include kernel threads
+.TP
+\fB\-\-ascii\fR
+Use plain ASCII glyphs instead of the Unicode ones
+.TP
+\fB\-\-screensaver\fR
+Exit on any key or mouse event; hide labels and the info box
+.TP
+\fB\-\-feed\fR
+Let `f` drop food; fish that eat get a small priority nudge (needs privileges to raise priority, and only ever touches your own processes)
+.TP
+\fB\-\-seed\fR \fI<N>\fR
+Fixed random seed, for a reproducible tank
+.TP
+\fB\-\-config\fR \fI<PATH>\fR
+Path to a TOML config file (theme and defaults)
+.TP
+\fB\-\-no\-mouse\fR
+Don\*(Aqt capture the mouse, so text selection keeps working
+.TP
+\fB\-\-record\fR \fI<PATH>\fR
+Write every snapshot as a JSON line to this file
+.TP
+\fB\-\-replay\fR \fI<PATH>\fR
+Replay snapshots from a recording instead of sampling
+.TP
+\fB\-\-kill\fR
+Allow `k` to send SIGTERM to the selected process (asks first)
+.TP
+\fB\-\-colors\fR \fI<MODE>\fR
+Colour handling: auto (default), truecolor, 256 or none
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+auto: Truecolour when the terminal advertises it, else 256\-colour
+.IP \(bu 2
+truecolor: Always 24\-bit RGB
+.IP \(bu 2
+256: Always the nearest of the 256 xterm colours
+.IP \(bu 2
+none: No colour, the same as setting `NO_COLOR`
+.RE
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+Examples:
+  procquarium                      open the tank
+  procquarium \-\-screensaver        any key or mouse event exits
+  procquarium \-\-user $USER         only your own processes
+  procquarium \-\-max\-fish 120       a crowded tank
+  procquarium \-\-filter \*(Aq^rust\*(Aq \-\-interval 0.5
+  procquarium \-\-feed               drop food with f
+  procquarium \-\-seed 7             the same tank every time
+  procquarium \-\-config tank.toml   your own colours, sprites and defaults
+  procquarium \-\-record run.jsonl   save a session
+  procquarium \-\-replay run.jsonl   play it back later
+
+Keys while running:
+  q / Esc          quit
+  Space            pause the tank
+  l                show or hide process names
+  Tab / Shift+Tab  cycle fish and show details (PID, CPU, memory)
+  + / \-            more or fewer fish
+  f                drop food (with \-\-feed)
+  /                search for a process by name
+  k                send SIGTERM to the selected process (with \-\-kill)
+  click a fish     select it (click empty water to clear)
+.SH VERSION
+v0.3.2

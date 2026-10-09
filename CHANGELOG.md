@@ -11,6 +11,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--colors auto|truecolor|256|none`. `auto` uses 24-bit RGB when `COLORTERM`
   advertises it and otherwise snaps every colour to the nearest of the 256 xterm
   colours, so the tank looks right in `TERM=xterm-256color COLORTERM=`.
+- A man page and bash/zsh/fish shell completions, generated from the clap
+  definition with `cargo run -p xtask` and shipped in the `.deb` and the release
+  archives.
 
 ### Fixed
 

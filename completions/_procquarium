@@ -1,0 +1,54 @@
+#compdef procquarium
+
+autoload -U is-at-least
+
+_procquarium() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--interval=[Seconds between process samples]:SECS:_default' \
+'--max-fish=[Maximum number of fish in the tank]:N:_default' \
+'--user=[Only show processes owned by this user]:USER:_default' \
+'--filter=[Only show processes whose name matches this regex]:REGEX:_default' \
+'--seed=[Fixed random seed, for a reproducible tank]:N:_default' \
+'--config=[Path to a TOML config file (theme and defaults)]:PATH:_files' \
+'--record=[Write every snapshot as a JSON line to this file]:PATH:_files' \
+'--replay=[Replay snapshots from a recording instead of sampling]:PATH:_files' \
+'--colors=[Colour handling\: auto (default), truecolor, 256 or none]:MODE:((auto\:"Truecolour when the terminal advertises it, else 256-colour"
+truecolor\:"Always 24-bit RGB"
+256\:"Always the nearest of the 256 xterm colours"
+none\:"No colour, the same as setting \`NO_COLOR\`"))' \
+'--kernel[Include kernel threads]' \
+'--ascii[Use plain ASCII glyphs instead of the Unicode ones]' \
+'--screensaver[Exit on any key or mouse event; hide labels and the info box]' \
+'--feed[Let \`f\` drop food; fish that eat get a small priority nudge (needs privileges to raise priority, and only ever touches your own processes)]' \
+'--no-mouse[Don'\''t capture the mouse, so text selection keeps working]' \
+'--kill[Allow \`k\` to send SIGTERM to the selected process (asks first)]' \
+'--dump[Print one snapshot as a table and exit]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+}
+
+(( $+functions[_procquarium_commands] )) ||
+_procquarium_commands() {
+    local commands; commands=()
+    _describe -t commands 'procquarium commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_procquarium" ]; then
+    _procquarium "$@"
+else
+    compdef _procquarium procquarium
+fi

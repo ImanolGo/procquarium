@@ -56,7 +56,8 @@ There is also a `.msi` for Windows and `.tar.xz` archives for each platform.
 
 ### Debian / Ubuntu
 
-Each release includes an `amd64` `.deb` built by `cargo-deb`:
+Each release includes an `amd64` `.deb` built by `cargo-deb`. It installs the
+binary plus the man page and shell completions for bash, zsh and fish:
 
 ```sh
 # download the procquarium_*.deb from the latest release, then:

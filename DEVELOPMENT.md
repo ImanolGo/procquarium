@@ -140,7 +140,9 @@ one commit each:
 A release is just a version tag:
 
 1. Bump `version` in `Cargo.toml`, add a `CHANGELOG.md` entry, and commit.
-2. `git tag -a vX.Y.Z -m "procquarium X.Y.Z"` and `git push origin vX.Y.Z`.
+2. Run `cargo run -p xtask` to refresh the committed man page and shell
+   completions (CI fails if they are stale), then commit.
+3. `git tag -a vX.Y.Z -m "procquarium X.Y.Z"` and `git push origin vX.Y.Z`.
 
 The tag drives the rest:
 
