@@ -66,7 +66,8 @@ sudo apt install ./procquarium_*.deb
 
 ### With a Rust toolchain
 
-Requires Rust **1.95** or newer.
+Requires Rust **1.95** or newer. The MSRV policy is the latest stable Rust
+minus two releases; raising it is not a breaking change.
 
 ```sh
 cargo install procquarium
