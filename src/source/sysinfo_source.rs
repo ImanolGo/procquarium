@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use anyhow::Result;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users};
 
-use super::priority::{BoostBook, PriorityBackend};
+use super::priority::BoostBook;
+#[cfg(unix)]
+use super::priority::PriorityBackend;
 use super::{PriorityBoost, ProcInfo, ProcStatus, ProcessSource, Snapshot};
 
 /// Live process source. A fresh `SysinfoSource` performs one refresh on
@@ -21,7 +23,8 @@ pub struct SysinfoSource {
     /// it was computed for so a reused PID is re-checked.
     container_cache: HashMap<u32, (u64, bool)>,
     /// Original niceness of processes we have fed, so boosts are capped and can
-    /// be undone.
+    /// be undone. Only read on Unix, where priorities exist.
+    #[cfg_attr(not(unix), allow(dead_code))]
     book: BoostBook,
 }
 
@@ -207,22 +210,25 @@ impl PriorityBackend for UnixPriority {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(all(unix, any(target_os = "linux", target_os = "android")))]
 fn errno_location() -> *mut libc::c_int {
     unsafe { libc::__errno_location() }
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(all(unix, any(target_os = "macos", target_os = "ios")))]
 fn errno_location() -> *mut libc::c_int {
     unsafe { libc::__error() }
 }
 
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "macos",
-    target_os = "ios"
-)))]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "ios"
+    ))
+))]
 fn errno_location() -> *mut libc::c_int {
     std::ptr::null_mut()
 }
