@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `--config` now loads a full config file: the theme lives under a `[theme]`
+  table, and top-level keys (`interval`, `max_fish`, `user`, `filter`, `kernel`,
+  `ascii`, `feed`) set defaults that command-line flags override. The old
+  flat theme layout is no longer accepted.
+
 ## [0.3.2] - 2026-10-09
 
 ### Changed

@@ -81,7 +81,7 @@ procquarium --max-fish 120  # crowded tank
 procquarium --filter '^rust' --interval 0.5
 procquarium --feed           # press f to drop food
 procquarium --seed 7        # the same tank every time
-procquarium --config theme.toml  # your own colours and sprites
+procquarium --config tank.toml  # your own colours, sprites and defaults
 procquarium --record run.jsonl   # save a session
 procquarium --replay run.jsonl   # play it back later
 ```
@@ -117,7 +117,7 @@ Flags:
 | `--screensaver` | Exit on any key or mouse event; no labels or info box |
 | `--feed` | Let `f` drop food; fed fish get a small priority nudge |
 | `--no-mouse` | Don't capture the mouse (keeps text selection working) |
-| `--config <PATH>` | Load a theme from a TOML file |
+| `--config <PATH>` | Load a config file: theme and defaults (see below) |
 | `--record <PATH>` | Write each snapshot to a file as a JSON line |
 | `--replay <PATH>` | Replay a recording instead of sampling |
 | `--kill` | Allow `k` to send SIGTERM to the selected process (asks first) |
@@ -126,17 +126,27 @@ Flags:
 `procquarium --dump` (hidden) prints the process table as a plain table and
 exits; it's handy for checking what the aquarium would see on another machine.
 
-### Themes
+### Configuration
 
-Give the tank your own colours and sprites with a TOML file (`--config`, or
-`$XDG_CONFIG_HOME/procquarium/config.toml`). Everything is optional; anything
-you leave out keeps its default.
+Give the tank your own colours, sprites and defaults with a TOML file
+(`--config`, or `$XDG_CONFIG_HOME/procquarium/config.toml`). Everything is
+optional; anything you leave out keeps its default. Top-level keys are defaults
+that the matching command-line flags override, and the theme lives under a
+`[theme]` table.
 
 ```toml
+# Defaults, overridden by the matching flags.
+max_fish = 40
+interval = 2.0
+user = "you"
+filter = "^rust"
+kernel = true
+
+[theme]
 # Fish colours are picked from this list by process name.
 palette = ["#ff6b6b", "#4ecdc4", "#ffe66d"]
 
-[sprites]
+[theme.sprites]
 # Four fish, smallest to largest. The eye (o/°) becomes ✕ for zombies.
 fish = ["><>", "><(°>", "><((°>", "><(((°>"]
 fish_ascii = ["><>", "><(o>", "><((o>", "><(((o>"]

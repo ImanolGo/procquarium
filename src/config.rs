@@ -1,11 +1,13 @@
 //! Configuration derived from the command line.
 
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use regex::Regex;
+use serde::Deserialize;
 
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeSection};
 
 /// Everything the simulation and UI need to know about how the user wants to run.
 #[derive(Debug, Clone)]
@@ -40,7 +42,7 @@ pub struct Config {
     pub kill: bool,
     /// Draw in the terminal's default colours (`NO_COLOR`).
     pub mono: bool,
-    /// Colours and sprites, optionally loaded from a config file.
+    /// Colours and sprites, from the config file or the built-in theme.
     pub theme: Theme,
 }
 
@@ -49,6 +51,63 @@ impl Config {
     pub fn builder() -> ConfigBuilder {
         ConfigBuilder::default()
     }
+}
+
+/// The contents of a config file: optional settings and a `[theme]` table.
+///
+/// Every field is optional, and every value here is a default that the
+/// command-line flags override. Unknown keys are rejected so a typo is an
+/// error rather than a silent no-op.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FileConfig {
+    pub interval: Option<f64>,
+    pub max_fish: Option<usize>,
+    pub user: Option<String>,
+    pub filter: Option<String>,
+    pub kernel: Option<bool>,
+    pub ascii: Option<bool>,
+    pub feed: Option<bool>,
+    pub theme: Option<ThemeSection>,
+}
+
+impl FileConfig {
+    /// Load the config file at `path`, else the default location, else return an
+    /// empty config. An explicit `path` that cannot be read is an error; a
+    /// missing default file is not.
+    pub fn load(path: Option<&Path>) -> Result<Self> {
+        if let Some(path) = path {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("reading config {}", path.display()))?;
+            return Self::from_toml(&text)
+                .with_context(|| format!("parsing config {}", path.display()));
+        }
+
+        match default_config_path() {
+            Some(path) if path.exists() => {
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading config {}", path.display()))?;
+                Self::from_toml(&text).with_context(|| format!("parsing config {}", path.display()))
+            }
+            _ => Ok(Self::default()),
+        }
+    }
+
+    /// Parse a config file from TOML text.
+    pub fn from_toml(text: &str) -> Result<Self> {
+        Ok(toml::from_str(text)?)
+    }
+}
+
+/// The default config file: `$XDG_CONFIG_HOME/procquarium/config.toml`, falling
+/// back to `~/.config/procquarium/config.toml`.
+fn default_config_path() -> Option<PathBuf> {
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME")
+        && !xdg.is_empty()
+    {
+        return Some(PathBuf::from(xdg).join("procquarium/config.toml"));
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/procquarium/config.toml"))
 }
 
 /// Builder for [`Config`], so callers set only what they care about instead of
@@ -69,6 +128,7 @@ pub struct ConfigBuilder {
     record: Option<std::path::PathBuf>,
     replay: Option<std::path::PathBuf>,
     kill: bool,
+    theme_section: Option<ThemeSection>,
 }
 
 impl Default for ConfigBuilder {
@@ -88,6 +148,7 @@ impl Default for ConfigBuilder {
             record: None,
             replay: None,
             kill: false,
+            theme_section: None,
         }
     }
 }
@@ -163,34 +224,66 @@ impl ConfigBuilder {
         self
     }
 
+    /// Apply settings from a config file. Flags set afterwards override them.
+    pub fn from_file(mut self, file: FileConfig) -> Self {
+        if let Some(interval) = file.interval {
+            self.interval_secs = interval;
+        }
+        if let Some(max_fish) = file.max_fish {
+            self.max_fish = max_fish;
+        }
+        if let Some(user) = file.user {
+            self.user = Some(user);
+        }
+        if let Some(filter) = file.filter {
+            self.filter = Some(filter);
+        }
+        if let Some(kernel) = file.kernel {
+            self.kernel = kernel;
+        }
+        if let Some(ascii) = file.ascii {
+            self.ascii = ascii;
+        }
+        if let Some(feed) = file.feed {
+            self.feed = feed;
+        }
+        self.theme_section = file.theme;
+        self
+    }
+
     /// Validate and build the config, with a clear error for anything invalid.
     pub fn build(self) -> Result<Config> {
         if !self.interval_secs.is_finite() || self.interval_secs <= 0.0 {
-            bail!("--interval must be a positive number of seconds");
+            bail!("interval must be a positive number of seconds");
         }
         let interval = Duration::try_from_secs_f64(self.interval_secs)
-            .map_err(|_| anyhow::anyhow!("--interval is too large"))?;
+            .map_err(|_| anyhow::anyhow!("interval is too large"))?;
         if interval < sysinfo::MINIMUM_CPU_UPDATE_INTERVAL {
             bail!(
-                "--interval must be at least {} ms: sysinfo needs two samples close \
+                "interval must be at least {} ms: sysinfo needs two samples close \
                  together before CPU numbers are meaningful",
                 sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_millis()
             );
         }
         if interval > Duration::from_secs(3600) {
-            bail!("--interval must be at most 3600 seconds");
+            bail!("interval must be at most 3600 seconds");
         }
         if !(1..=500).contains(&self.max_fish) {
-            bail!("--max-fish must be between 1 and 500");
+            bail!("max_fish must be between 1 and 500");
         }
 
         let filter = match self.filter {
             Some(pattern) => Some(
                 Regex::new(&pattern)
-                    .map_err(|e| anyhow::anyhow!("--filter is not a valid regex: {e}"))?,
+                    .map_err(|e| anyhow::anyhow!("filter is not a valid regex: {e}"))?,
             ),
             None => None,
         };
+
+        let mut theme = Theme::default();
+        if let Some(section) = self.theme_section {
+            theme.apply_section(section)?;
+        }
 
         Ok(Config {
             interval,
@@ -208,7 +301,7 @@ impl ConfigBuilder {
             replay: self.replay,
             kill: self.kill,
             mono: std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
-            theme: Theme::default(),
+            theme,
         })
     }
 }
@@ -261,5 +354,66 @@ mod tests {
             .build()
             .expect("valid");
         assert!(c.filter.expect("filter").is_match("firefox"));
+    }
+
+    #[test]
+    fn config_file_supplies_defaults() {
+        let file = FileConfig::from_toml(
+            r#"
+            interval = 2.0
+            max_fish = 40
+            user = "alice"
+            filter = "^rust"
+            kernel = true
+            ascii = true
+            feed = true
+            "#,
+        )
+        .expect("valid");
+        let c = Config::builder().from_file(file).build().expect("valid");
+        assert_eq!(c.interval, Duration::from_secs(2));
+        assert_eq!(c.max_fish, 40);
+        assert_eq!(c.user.as_deref(), Some("alice"));
+        assert!(c.filter.expect("filter").is_match("rustc"));
+        assert!(c.kernel);
+        assert!(c.ascii);
+        assert!(c.feed);
+    }
+
+    #[test]
+    fn flags_override_the_config_file() {
+        let file = FileConfig::from_toml("interval = 2.0\nmax_fish = 40").expect("valid");
+        let c = Config::builder()
+            .from_file(file)
+            .interval(3.0)
+            .max_fish(7)
+            .build()
+            .expect("valid");
+        assert_eq!(c.interval, Duration::from_secs(3));
+        assert_eq!(c.max_fish, 7);
+    }
+
+    #[test]
+    fn config_file_theme_section_is_applied() {
+        let file = FileConfig::from_toml(
+            r##"
+            [theme]
+            palette = ["#010203"]
+
+            [theme.sprites]
+            crab = "CRAB"
+            "##,
+        )
+        .expect("valid");
+        let c = Config::builder().from_file(file).build().expect("valid");
+        assert_eq!(c.theme.palette, vec![ratatui::style::Color::Rgb(1, 2, 3)]);
+        assert_eq!(c.theme.sprites.crab, "CRAB");
+    }
+
+    #[test]
+    fn config_file_rejects_unknown_keys_and_the_old_flat_theme() {
+        assert!(FileConfig::from_toml("nonsense = 1").is_err());
+        // The pre-1.0 flat theme format is gone: palette now lives under [theme].
+        assert!(FileConfig::from_toml(r##"palette = ["#010203"]"##).is_err());
     }
 }

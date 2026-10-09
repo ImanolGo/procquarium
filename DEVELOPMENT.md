@@ -128,9 +128,12 @@ one commit each:
   undone when the fish leaves or on exit; it only ever touches processes owned
   by you, and reports when the kernel refuses the change (`Denied`).
 - **Themes.** `--config <PATH>` (or `$XDG_CONFIG_HOME/procquarium/config.toml`)
-  loads a TOML palette and sprite overrides. `Theme::from_toml` is pure and
-  tested; the renderer reads the palette and a `Sprites` set out of the config,
-  so custom sprites and colours flow everywhere with no globals.
+  loads a TOML palette and sprite overrides under a `[theme]` table. The renderer
+  reads the palette and a `Sprites` set out of the config, so custom sprites and
+  colours flow everywhere with no globals.
+- **Config file.** The same file can set defaults (`interval`, `max_fish`,
+  `user`, `filter`, `kernel`, `ascii`, `feed`) that the command-line flags
+  override; `FileConfig` parses it and `ConfigBuilder::from_file` merges it.
 
 ## Releasing
 

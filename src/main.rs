@@ -14,13 +14,12 @@ use crossterm::execute;
 use rand::Rng;
 
 use procquarium::app::App;
-use procquarium::config::Config;
+use procquarium::config::{self, Config};
 use procquarium::render::{self, human_bytes};
 use procquarium::sampler;
 use procquarium::source::record;
 use procquarium::source::sysinfo_source::SysinfoSource;
 use procquarium::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
-use procquarium::theme;
 
 const AFTER_HELP: &str = "\
 Examples:
@@ -31,7 +30,7 @@ Examples:
   procquarium --filter '^rust' --interval 0.5
   procquarium --feed               drop food with f
   procquarium --seed 7             the same tank every time
-  procquarium --config theme.toml  your own colours and sprites
+  procquarium --config tank.toml   your own colours, sprites and defaults
   procquarium --record run.jsonl   save a session
   procquarium --replay run.jsonl   play it back later
 
@@ -59,17 +58,16 @@ it as a screensaver.",
 )]
 struct Cli {
     /// Seconds between process samples.
-    #[arg(long, value_name = "SECS", default_value_t = 1.0)]
-    interval: f64,
+    #[arg(long, value_name = "SECS")]
+    interval: Option<f64>,
 
     /// Maximum number of fish in the tank.
     #[arg(
         long,
         value_name = "N",
-        default_value_t = 25,
         value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..=500)
     )]
-    max_fish: usize,
+    max_fish: Option<usize>,
 
     /// Only show processes owned by this user.
     #[arg(long, value_name = "USER")]
@@ -100,7 +98,7 @@ struct Cli {
     #[arg(long, value_name = "N")]
     seed: Option<u64>,
 
-    /// Path to a TOML theme file (palette and sprites).
+    /// Path to a TOML config file (theme and defaults).
     #[arg(long, value_name = "PATH")]
     config: Option<std::path::PathBuf>,
 
@@ -127,15 +125,33 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut config = Config::builder()
-        .interval(cli.interval)
-        .max_fish(cli.max_fish)
-        .user(cli.user)
-        .filter(cli.filter)
-        .kernel(cli.kernel)
-        .ascii(cli.ascii)
+
+    // The config file supplies defaults; explicit flags override them.
+    let file = config::FileConfig::load(cli.config.as_deref())?;
+    let mut builder = Config::builder().from_file(file);
+    if let Some(interval) = cli.interval {
+        builder = builder.interval(interval);
+    }
+    if let Some(max_fish) = cli.max_fish {
+        builder = builder.max_fish(max_fish);
+    }
+    if let Some(user) = cli.user {
+        builder = builder.user(Some(user));
+    }
+    if let Some(filter) = cli.filter {
+        builder = builder.filter(Some(filter));
+    }
+    if cli.kernel {
+        builder = builder.kernel(true);
+    }
+    if cli.ascii {
+        builder = builder.ascii(true);
+    }
+    if cli.feed {
+        builder = builder.feed(true);
+    }
+    let config = builder
         .screensaver(cli.screensaver)
-        .feed(cli.feed)
         .seed(cli.seed)
         .dump(cli.dump)
         .no_mouse(cli.no_mouse)
@@ -152,8 +168,6 @@ fn main() -> Result<()> {
         print_dump(&snapshot);
         return Ok(());
     }
-
-    config.theme = theme::Theme::load(cli.config.as_deref())?;
 
     let seed = config.seed.unwrap_or_else(|| rand::rng().random());
     let mut terminal = ratatui::init();
