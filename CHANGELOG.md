@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-09
+
+### Added
+
+- Prebuilt binaries and installers (shell, PowerShell, MSI) for Linux, macOS
+  and Windows, built by [dist](https://github.com/axodotdev/cargo-dist) on
+  every version tag alongside source tarballs and checksums.
+- crates.io publishing metadata and an Arch `PKGBUILD` under `packaging/aur`.
+
 ## [0.2.0] - 2026-10-09
 
 ### Added
@@ -54,6 +63,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.1.0

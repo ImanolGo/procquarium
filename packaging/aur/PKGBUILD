@@ -1,0 +1,41 @@
+# Maintainer: ImanolGo <ImanolGo@users.noreply.github.com>
+pkgname=procquarium
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Your running processes, as fish"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ImanolGo/procquarium"
+license=('MIT')
+depends=('gcc-libs')
+makedepends=('rust')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('322f59d95aabfa6e2f380a1b4176de377610c90be6f7e39c63910e2279ced8f4')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export CARGO_HOME="$srcdir/cargo"
+  cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export CARGO_HOME="$srcdir/cargo"
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/build"
+  cargo build --frozen --release --target "$CARCH-unknown-linux-gnu"
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export CARGO_HOME="$srcdir/cargo"
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/build"
+  cargo test --frozen --release --target "$CARCH-unknown-linux-gnu"
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 "target/$CARCH-unknown-linux-gnu/release/$pkgname" \
+    "$pkgdir/usr/bin/$pkgname"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 procquarium.example.toml \
+    "$pkgdir/usr/share/doc/$pkgname/config.toml.example"
+}

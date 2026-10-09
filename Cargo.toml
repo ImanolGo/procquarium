@@ -1,14 +1,23 @@
 [package]
 name = "procquarium"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Your running processes, as fish."
 license = "MIT"
+authors = ["ImanolGo <ImanolGo@users.noreply.github.com>"]
 repository = "https://github.com/ImanolGo/procquarium"
 readme = "README.md"
 keywords = ["tui", "process", "monitor", "aquarium", "ratatui"]
 categories = ["command-line-utilities"]
+# Keep the 4.4 MB demo out of the published crate.
+exclude = ["demo.gif", ".github/"]
+
+[package.metadata.wix]
+upgrade-guid = "C334D739-80F0-4A11-A962-75E2CFD24FD5"
+path-guid = "5A302ABC-B235-4459-8171-1F3F0A21DE12"
+license = false
+eula = false
 
 [dependencies]
 ratatui = "0.30"
@@ -31,3 +40,8 @@ insta = "1"
 [profile.release]
 lto = true
 codegen-units = 1
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
