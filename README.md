@@ -111,6 +111,8 @@ Flags:
 | `--feed` | Let `f` drop food; fed fish get a small priority nudge |
 | `--no-mouse` | Don't capture the mouse (keeps text selection working) |
 | `--config <PATH>` | Load a theme from a TOML file |
+| `--record <PATH>` | Write each snapshot to a file as a JSON line |
+| `--replay <PATH>` | Replay a recording instead of sampling |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
 
 `procquarium --dump` (hidden) prints the process table as a plain table and

@@ -17,6 +17,7 @@ use procquarium::app::App;
 use procquarium::config::Config;
 use procquarium::render::{self, human_bytes};
 use procquarium::sampler;
+use procquarium::source::record;
 use procquarium::source::sysinfo_source::SysinfoSource;
 use procquarium::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
 use procquarium::theme;
@@ -90,6 +91,14 @@ struct Cli {
     #[arg(long)]
     no_mouse: bool,
 
+    /// Write every snapshot as a JSON line to this file.
+    #[arg(long, value_name = "PATH")]
+    record: Option<std::path::PathBuf>,
+
+    /// Replay snapshots from a recording instead of sampling.
+    #[arg(long, value_name = "PATH")]
+    replay: Option<std::path::PathBuf>,
+
     /// Print one snapshot as a table and exit.
     #[arg(long, hide = true)]
     dump: bool,
@@ -109,6 +118,8 @@ fn main() -> Result<()> {
         .seed(cli.seed)
         .dump(cli.dump)
         .no_mouse(cli.no_mouse)
+        .record(cli.record)
+        .replay(cli.replay)
         .build()?;
 
     if config.dump {
@@ -149,8 +160,19 @@ fn main() -> Result<()> {
 
 fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Result<()> {
     let interval = config.interval;
+    let recorder = match &config.record {
+        Some(path) => Some(record::Recorder::create(path)?),
+        None => None,
+    };
     // Dropping the sampler stops its thread and restores any priorities it set.
-    let sampler = sampler::Sampler::spawn(interval)?;
+    let sampler = match &config.replay {
+        Some(path) => sampler::Sampler::spawn_with_recorder(
+            interval,
+            record::ReplaySource::open(path)?,
+            recorder,
+        )?,
+        None => sampler::Sampler::spawn_with_recorder(interval, SysinfoSource::new(), recorder)?,
+    };
 
     let size = terminal.size()?;
     let mut app = App::new(config, size.width, size.height, seed);

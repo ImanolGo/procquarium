@@ -32,6 +32,10 @@ pub struct Config {
     pub dump: bool,
     /// Don't capture the mouse, so text selection in the terminal keeps working.
     pub no_mouse: bool,
+    /// Write every snapshot as a JSON line to this file.
+    pub record: Option<std::path::PathBuf>,
+    /// Replay snapshots from this recording instead of sampling.
+    pub replay: Option<std::path::PathBuf>,
     /// Draw in the terminal's default colours (`NO_COLOR`).
     pub mono: bool,
     /// Colours and sprites, optionally loaded from a config file.
@@ -60,6 +64,8 @@ pub struct ConfigBuilder {
     seed: Option<u64>,
     dump: bool,
     no_mouse: bool,
+    record: Option<std::path::PathBuf>,
+    replay: Option<std::path::PathBuf>,
 }
 
 impl Default for ConfigBuilder {
@@ -76,6 +82,8 @@ impl Default for ConfigBuilder {
             seed: None,
             dump: false,
             no_mouse: false,
+            record: None,
+            replay: None,
         }
     }
 }
@@ -136,6 +144,16 @@ impl ConfigBuilder {
         self
     }
 
+    pub fn record(mut self, record: Option<std::path::PathBuf>) -> Self {
+        self.record = record;
+        self
+    }
+
+    pub fn replay(mut self, replay: Option<std::path::PathBuf>) -> Self {
+        self.replay = replay;
+        self
+    }
+
     /// Validate and build the config, with a clear error for anything invalid.
     pub fn build(self) -> Result<Config> {
         if !self.interval_secs.is_finite() || self.interval_secs <= 0.0 {
@@ -177,6 +195,8 @@ impl ConfigBuilder {
             seed: self.seed,
             dump: self.dump,
             no_mouse: self.no_mouse,
+            record: self.record,
+            replay: self.replay,
             mono: std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
             theme: Theme::default(),
         })

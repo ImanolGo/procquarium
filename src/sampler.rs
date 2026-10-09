@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::source::record::Recorder;
 use crate::source::sysinfo_source::SysinfoSource;
 use crate::source::{PriorityBoost, ProcessSource, Snapshot};
 
@@ -40,8 +41,20 @@ impl Sampler {
         Self::spawn_with(interval, SysinfoSource::new())
     }
 
-    /// Spawn with a specific source (used by tests).
+    /// Spawn with a specific source (used by tests and replay).
     pub fn spawn_with<S>(interval: Duration, source: S) -> std::io::Result<Self>
+    where
+        S: ProcessSource + Send + 'static,
+    {
+        Self::spawn_with_recorder(interval, source, None)
+    }
+
+    /// Spawn with a source and, optionally, a recorder that logs every snapshot.
+    pub fn spawn_with_recorder<S>(
+        interval: Duration,
+        source: S,
+        recorder: Option<Recorder>,
+    ) -> std::io::Result<Self>
     where
         S: ProcessSource + Send + 'static,
     {
@@ -49,7 +62,7 @@ impl Sampler {
         let (event_tx, events) = mpsc::channel();
         let handle = thread::Builder::new()
             .name("procquarium-sampler".to_string())
-            .spawn(move || worker(interval, source, command_rx, event_tx))?;
+            .spawn(move || worker(interval, source, recorder, command_rx, event_tx))?;
         Ok(Self {
             commands,
             events,
@@ -92,8 +105,13 @@ impl Drop for Sampler {
     }
 }
 
-fn worker<S>(interval: Duration, mut source: S, commands: Receiver<Command>, events: Sender<Event>)
-where
+fn worker<S>(
+    interval: Duration,
+    mut source: S,
+    mut recorder: Option<Recorder>,
+    commands: Receiver<Command>,
+    events: Sender<Event>,
+) where
     S: ProcessSource,
 {
     loop {
@@ -123,6 +141,13 @@ where
 
         match source.snapshot() {
             Ok(snapshot) => {
+                if let Some(log) = &mut recorder
+                    && let Err(error) = log.write(&snapshot)
+                {
+                    // Stop recording but keep the aquarium running.
+                    let _ = events.send(Event::Error(format!("recording failed: {error}")));
+                    recorder = None;
+                }
                 if events.send(Event::Snapshot(snapshot)).is_err() {
                     source.restore_all_priorities();
                     return;
