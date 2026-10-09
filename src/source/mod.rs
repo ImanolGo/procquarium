@@ -82,6 +82,10 @@ pub trait ProcessSource {
 }
 
 /// Result of a [`ProcessSource::boost_priority`] attempt.
+///
+/// `Applied` and `Denied` are only produced on Unix; the other platforms always
+/// return `Unsupported`, so silence the dead-code lint there.
+#[cfg_attr(not(unix), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PriorityBoost {
     Applied,
