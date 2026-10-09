@@ -131,4 +131,49 @@ mod tests {
         let snap = snapshot(vec![proc(5, "a"), proc(3, "b"), proc(9, "c")]);
         assert_eq!(select_pids(&snap, &config()), vec![3, 5, 9]);
     }
+
+    #[test]
+    fn dropping_pids_makes_fish_leave() {
+        use crate::diff::ProcEvent;
+        let mut app = App::new(config(), 80, 24, 1);
+        let sel: HashSet<u32> = [1u32].into_iter().collect();
+        app.tank
+            .apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        assert_eq!(app.tank.fish.len(), 1);
+
+        // A new snapshot without pid 1: the fish should start leaving.
+        app.apply_snapshot(snapshot(vec![proc(2, "other")]));
+        assert_eq!(
+            app.tank.fish[0].state,
+            crate::tank::fish::FishState::Leaving
+        );
+    }
+
+    #[test]
+    fn scripted_lifecycle_eggs_hatches_then_floats() {
+        use crate::source::ProcessSource;
+        use crate::source::fake::FakeSource;
+
+        let mut source = FakeSource::from_script(vec![vec![], vec![proc(1, "sleep")], vec![]]);
+        let mut app = App::new(config(), 80, 24, 3);
+
+        app.apply_snapshot(source.snapshot().expect("sample"));
+        assert!(app.ready);
+        app.apply_snapshot(source.snapshot().expect("sample"));
+        assert_eq!(app.tank.eggs.len(), 1);
+
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        assert_eq!(app.tank.fish.len(), 1);
+
+        app.apply_snapshot(source.snapshot().expect("sample"));
+        assert_eq!(
+            app.tank.fish[0].state,
+            crate::tank::fish::FishState::Exiting
+        );
+    }
 }

@@ -29,6 +29,10 @@ impl FakeSource {
         let snap = snapshot(procs);
         Self::new(vec![snap.clone(), snap])
     }
+
+    pub fn from_script(procs: impl IntoIterator<Item = Vec<ProcInfo>>) -> Self {
+        Self::new(procs.into_iter().map(snapshot).collect())
+    }
 }
 
 impl ProcessSource for FakeSource {

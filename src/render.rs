@@ -3,10 +3,10 @@
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 
 use crate::app::App;
-use crate::tank::fish::{Facing, Fish};
+use crate::tank::fish::{Facing, Fish, FishState};
 use crate::tank::{mapping, sprites};
 
 const WATER_TOP: Color = Color::Rgb(8, 24, 48);
@@ -17,6 +17,7 @@ const SURFACE: Color = Color::Rgb(120, 190, 230);
 const BUBBLE: Color = Color::Rgb(150, 205, 235);
 const SEAWEED: Color = Color::Rgb(46, 140, 90);
 const MUTED: Color = Color::Rgb(140, 165, 190);
+const ZOMBIE: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let area = frame.area();
@@ -42,8 +43,24 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_seaweed(buf, area, app, time);
     draw_bubbles(buf, area, app, ascii);
 
+    for egg in &app.tank.eggs {
+        let wobble = (egg.phase).sin();
+        let x = egg.x.round() as i32 + wobble.round() as i32;
+        let y = (area.height as i32 - 2).max(1);
+        put(
+            buf,
+            area,
+            x,
+            y,
+            if ascii { 'o' } else { '°' },
+            Style::default().fg(mapping::color_for_name(&egg.info.name)),
+        );
+    }
+
+    // Reused across fish so rendering does not allocate per fish per frame.
+    let mut sprites_buf: Vec<char> = Vec::with_capacity(8);
     for fish in &app.tank.fish {
-        draw_fish(buf, area, fish, ascii);
+        draw_fish(buf, area, fish, ascii, &mut sprites_buf);
     }
 
     if !app.ready
@@ -129,18 +146,33 @@ fn draw_bubbles(buf: &mut Buffer, area: Rect, app: &App, ascii: bool) {
     }
 }
 
-fn draw_fish(buf: &mut Buffer, area: Rect, fish: &Fish, ascii: bool) {
-    let style = Style::default().fg(mapping::color_for_name(&fish.info.name));
-    let sprite = sprites::sprite(
-        fish.size.round().clamp(0.0, 3.0) as u8,
-        fish.facing == Facing::Left,
-        ascii,
-        false,
-    );
-    let len = sprite.len() as i32;
+fn draw_fish(buf: &mut Buffer, area: Rect, fish: &Fish, ascii: bool, sprite_buf: &mut Vec<char>) {
+    let zombie = fish.is_zombie();
+    let base = if zombie {
+        ZOMBIE
+    } else {
+        mapping::color_for_name(&fish.info.name)
+    };
+    let mut style = Style::default().fg(base);
+    if zombie {
+        style = style.add_modifier(Modifier::DIM);
+    }
+    if fish.state == FishState::Exiting && fish.death > 0.0 {
+        style = style.add_modifier(Modifier::DIM);
+    }
+
+    let facing_left = fish.facing == Facing::Left;
+    let size = fish.size.round().clamp(0.0, 3.0) as u8;
+    if fish.state == FishState::Exiting {
+        sprites::dead_sprite_into(sprite_buf, size, facing_left, ascii);
+    } else {
+        sprites::sprite_into(sprite_buf, size, facing_left, ascii, zombie);
+    }
+
+    let len = sprite_buf.len() as i32;
     let ox = fish.pos.0.round() as i32 - len / 2;
     let oy = fish.pos.1.round() as i32;
-    for (i, ch) in sprite.iter().enumerate() {
+    for (i, ch) in sprite_buf.iter().enumerate() {
         put(buf, area, ox + i as i32, oy, *ch, style);
     }
 }
