@@ -16,7 +16,7 @@ use crossterm::execute;
 use rand::Rng;
 
 use procquarium::app::App;
-use procquarium::config::{self, Config};
+use procquarium::config::{self, ColorMode, Config};
 use procquarium::render::{self, human_bytes};
 use procquarium::sampler;
 use procquarium::source::record;
@@ -120,6 +120,10 @@ struct Cli {
     #[arg(long)]
     kill: bool,
 
+    /// Colour handling: auto (default), truecolor, 256 or none.
+    #[arg(long, value_name = "MODE", value_enum)]
+    colors: Option<ColorMode>,
+
     /// Print one snapshot as a table and exit.
     #[arg(long, hide = true)]
     dump: bool,
@@ -151,6 +155,9 @@ fn main() -> Result<()> {
     }
     if cli.feed {
         builder = builder.feed(true);
+    }
+    if let Some(colors) = cli.colors {
+        builder = builder.colors(colors);
     }
     let config = builder
         .screensaver(cli.screensaver)

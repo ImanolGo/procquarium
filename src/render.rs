@@ -10,6 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::App;
+use crate::config::ColorMode;
 use crate::source::ProcStatus;
 use crate::tank::fish::{CreatureKind, Facing, Fish, FishState};
 use crate::tank::mapping;
@@ -36,13 +37,16 @@ const MIN_HEIGHT: u16 = 8;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let mono = app.config.mono;
-
     if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-        draw_too_small(frame, area, mono);
-        return;
+        draw_too_small(frame, area);
+    } else {
+        draw_tank(frame, app, area);
     }
+    // One place turns the RGB colours into whatever the terminal can show.
+    apply_color_mode(frame.buffer_mut(), area, app.config.colors.resolved());
+}
 
+fn draw_tank(frame: &mut Frame, app: &App, area: Rect) {
     let time = app.tank.time;
     let ascii = app.config.ascii;
     let theme = &app.config.theme;
@@ -178,20 +182,92 @@ pub fn draw(frame: &mut Frame, app: &App) {
             draw_text(buf, area, i32::from(area.x) + 1, y, &text, style);
         }
     }
+}
 
-    // NO_COLOR: keep the glyphs but drop every colour and attribute.
-    if mono {
-        for y in area.y..area.bottom() {
-            for x in area.x..area.right() {
-                buf[(x, y)].set_style(Style::default());
+/// Rewrite every cell's colours for terminals that cannot show 24-bit RGB:
+/// drop them for `None`, or snap each to the nearest of the 256 xterm colours.
+/// `Truecolor` leaves the buffer untouched.
+fn apply_color_mode(buf: &mut Buffer, area: Rect, mode: ColorMode) {
+    match mode {
+        ColorMode::Truecolor => {}
+        ColorMode::Ansi256 => {
+            for y in area.y..area.bottom() {
+                for x in area.x..area.right() {
+                    let cell = &mut buf[(x, y)];
+                    cell.fg = nearest_256(cell.fg);
+                    cell.bg = nearest_256(cell.bg);
+                }
             }
+        }
+        ColorMode::None => {
+            for y in area.y..area.bottom() {
+                for x in area.x..area.right() {
+                    let cell = &mut buf[(x, y)];
+                    cell.set_fg(Color::Reset);
+                    cell.set_bg(Color::Reset);
+                    cell.modifier = Modifier::empty();
+                }
+            }
+        }
+        // `resolved()` never returns `Auto`; treat it as truecolour if it does.
+        ColorMode::Auto => {}
+    }
+}
+
+/// The RGB value of one of the 256 xterm colours.
+fn xterm_rgb(index: u8) -> (u8, u8, u8) {
+    const SYSTEM: [(u8, u8, u8); 16] = [
+        (0, 0, 0),
+        (128, 0, 0),
+        (0, 128, 0),
+        (128, 128, 0),
+        (0, 0, 128),
+        (128, 0, 128),
+        (0, 128, 128),
+        (192, 192, 192),
+        (128, 128, 128),
+        (255, 0, 0),
+        (0, 255, 0),
+        (255, 255, 0),
+        (0, 0, 255),
+        (255, 0, 255),
+        (0, 255, 255),
+        (255, 255, 255),
+    ];
+    match index {
+        0..=15 => SYSTEM[usize::from(index)],
+        16..=231 => {
+            let i = index - 16;
+            let level = |n: u8| if n == 0 { 0 } else { 55 + n * 40 };
+            (level(i / 36), level((i % 36) / 6), level(i % 6))
+        }
+        _ => {
+            let v = 8 + (index - 232) * 10;
+            (v, v, v)
         }
     }
 }
 
-/// A colour, or the terminal default when `NO_COLOR` is set.
-fn paint(mono: bool, color: Color) -> Color {
-    if mono { Color::Reset } else { color }
+/// Snap an RGB colour to the nearest of the 256 xterm colours. `Reset` and
+/// already-indexed colours pass through unchanged.
+fn nearest_256(color: Color) -> Color {
+    let Color::Rgb(r, g, b) = color else {
+        return color;
+    };
+    let mut best = 0u8;
+    let mut best_distance = u32::MAX;
+    for index in 0..=255u8 {
+        let (cr, cg, cb) = xterm_rgb(index);
+        let dr = i32::from(r) - i32::from(cr);
+        let dg = i32::from(g) - i32::from(cg);
+        let db = i32::from(b) - i32::from(cb);
+        let distance = (dr * dr + dg * dg + db * db) as u32;
+        if distance < best_distance {
+            best_distance = distance;
+            best = index;
+        }
+    }
+    Color::Indexed(best)
 }
 
 /// A barnacle for a long-running process: `·` after a day, `:` after a week.
@@ -261,7 +337,7 @@ fn draw_family_line(buf: &mut Buffer, area: Rect, from: (f32, f32), to: (f32, f3
     }
 }
 
-fn draw_too_small(frame: &mut Frame, area: Rect, mono: bool) {
+fn draw_too_small(frame: &mut Frame, area: Rect) {
     let height = 3.min(area.height);
     let y = area.y + area.height.saturating_sub(height) / 2;
     let rect = Rect::new(area.x, y, area.width, height);
@@ -269,14 +345,9 @@ fn draw_too_small(frame: &mut Frame, area: Rect, mono: bool) {
         Paragraph::new(vec![
             Line::from(Span::styled(
                 "procquarium",
-                Style::default()
-                    .fg(paint(mono, PANEL_FG))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(PANEL_FG).add_modifier(Modifier::BOLD),
             )),
-            Line::from(Span::styled(
-                "make me bigger",
-                Style::default().fg(paint(mono, MUTED)),
-            )),
+            Line::from(Span::styled("make me bigger", Style::default().fg(MUTED))),
         ])
         .alignment(Alignment::Center),
         rect,
@@ -763,5 +834,51 @@ mod tests {
         assert_eq!(dim(c, 0.0), c);
         assert_eq!(dim(c, 0.5), Color::Rgb(50, 100, 25));
         assert_eq!(dim(c, 1.0), Color::Rgb(0, 0, 0));
+    }
+
+    #[test]
+    fn xterm_rgb_knows_the_cube_and_the_grayscale_ramp() {
+        assert_eq!(xterm_rgb(16), (0, 0, 0));
+        assert_eq!(xterm_rgb(196), (255, 0, 0));
+        assert_eq!(xterm_rgb(231), (255, 255, 255));
+        assert_eq!(xterm_rgb(232), (8, 8, 8));
+        assert_eq!(xterm_rgb(255), (238, 238, 238));
+    }
+
+    #[test]
+    fn nearest_256_picks_the_closest_colour() {
+        assert_eq!(nearest_256(Color::Rgb(95, 0, 0)), Color::Indexed(52));
+        assert_eq!(nearest_256(Color::Rgb(255, 215, 0)), Color::Indexed(220));
+        assert_eq!(nearest_256(Color::Rgb(8, 8, 8)), Color::Indexed(232));
+        // Anything that is not RGB passes through untouched.
+        assert_eq!(nearest_256(Color::Reset), Color::Reset);
+        assert_eq!(nearest_256(Color::DarkGray), Color::DarkGray);
+    }
+
+    #[test]
+    fn apply_color_mode_snaps_or_drops_colours() {
+        let area = Rect::new(0, 0, 1, 1);
+
+        let mut buf = Buffer::empty(area);
+        buf[(0, 0)]
+            .set_fg(Color::Rgb(95, 0, 0))
+            .set_bg(Color::Rgb(8, 8, 8));
+        apply_color_mode(&mut buf, area, ColorMode::Ansi256);
+        assert_eq!(buf[(0, 0)].fg, Color::Indexed(52));
+        assert_eq!(buf[(0, 0)].bg, Color::Indexed(232));
+
+        let mut buf = Buffer::empty(area);
+        buf[(0, 0)]
+            .set_fg(Color::Rgb(95, 0, 0))
+            .set_bg(Color::Rgb(8, 8, 8));
+        apply_color_mode(&mut buf, area, ColorMode::None);
+        assert_eq!(buf[(0, 0)].fg, Color::Reset);
+        assert_eq!(buf[(0, 0)].bg, Color::Reset);
+
+        // Truecolour is a no-op.
+        let mut buf = Buffer::empty(area);
+        buf[(0, 0)].set_fg(Color::Rgb(95, 0, 0));
+        apply_color_mode(&mut buf, area, ColorMode::Truecolor);
+        assert_eq!(buf[(0, 0)].fg, Color::Rgb(95, 0, 0));
     }
 }

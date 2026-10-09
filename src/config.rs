@@ -40,10 +40,58 @@ pub struct Config {
     pub replay: Option<std::path::PathBuf>,
     /// Allow `k` to send SIGTERM to the selected process (opt-in).
     pub kill: bool,
-    /// Draw in the terminal's default colours (`NO_COLOR`).
-    pub mono: bool,
+    /// How colours are drawn (`--colors`, or `NO_COLOR`).
+    pub colors: ColorMode,
     /// Colours and sprites, from the config file or the built-in theme.
     pub theme: Theme,
+}
+
+/// How to colour the tank, from `--colors`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum ColorMode {
+    /// Truecolour when the terminal advertises it, else 256-colour.
+    #[default]
+    Auto,
+    /// Always 24-bit RGB.
+    Truecolor,
+    /// Always the nearest of the 256 xterm colours.
+    #[value(name = "256")]
+    Ansi256,
+    /// No colour, the same as setting `NO_COLOR`.
+    None,
+}
+
+impl ColorMode {
+    /// Resolve `Auto` against the environment: truecolour when `COLORTERM` is
+    /// `truecolor` or `24bit`, otherwise 256-colour.
+    pub fn resolved(self) -> Self {
+        match self {
+            Self::Auto if colorterm_is_truecolor() => Self::Truecolor,
+            Self::Auto => Self::Ansi256,
+            other => other,
+        }
+    }
+}
+
+fn colorterm_is_truecolor() -> bool {
+    std::env::var("COLORTERM")
+        .map(|value| is_truecolor(&value))
+        .unwrap_or(false)
+}
+
+/// Whether a `COLORTERM` value advertises 24-bit colour.
+pub fn is_truecolor(value: &str) -> bool {
+    value.eq_ignore_ascii_case("truecolor") || value.eq_ignore_ascii_case("24bit")
+}
+
+/// Pick the colour mode: an explicit `--colors` wins over `NO_COLOR`; on its
+/// own, a non-empty `NO_COLOR` means no colour.
+fn resolve_colors(explicit: Option<ColorMode>, no_color: bool) -> ColorMode {
+    match explicit {
+        Some(mode) => mode,
+        None if no_color => ColorMode::None,
+        None => ColorMode::Auto,
+    }
 }
 
 impl Config {
@@ -128,6 +176,7 @@ pub struct ConfigBuilder {
     record: Option<std::path::PathBuf>,
     replay: Option<std::path::PathBuf>,
     kill: bool,
+    colors: Option<ColorMode>,
     theme_section: Option<ThemeSection>,
 }
 
@@ -148,6 +197,7 @@ impl Default for ConfigBuilder {
             record: None,
             replay: None,
             kill: false,
+            colors: None,
             theme_section: None,
         }
     }
@@ -224,6 +274,11 @@ impl ConfigBuilder {
         self
     }
 
+    pub fn colors(mut self, colors: ColorMode) -> Self {
+        self.colors = Some(colors);
+        self
+    }
+
     /// Apply settings from a config file. Flags set afterwards override them.
     pub fn from_file(mut self, file: FileConfig) -> Self {
         if let Some(interval) = file.interval {
@@ -285,6 +340,9 @@ impl ConfigBuilder {
             theme.apply_section(section)?;
         }
 
+        let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+        let colors = resolve_colors(self.colors, no_color);
+
         Ok(Config {
             interval,
             max_fish: self.max_fish,
@@ -300,7 +358,7 @@ impl ConfigBuilder {
             record: self.record,
             replay: self.replay,
             kill: self.kill,
-            mono: std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
+            colors,
             theme,
         })
     }
@@ -415,5 +473,32 @@ mod tests {
         assert!(FileConfig::from_toml("nonsense = 1").is_err());
         // The pre-1.0 flat theme format is gone: palette now lives under [theme].
         assert!(FileConfig::from_toml(r##"palette = ["#010203"]"##).is_err());
+    }
+
+    #[test]
+    fn colorterm_truecolor_values_are_recognised() {
+        assert!(is_truecolor("truecolor"));
+        assert!(is_truecolor("TRUECOLOR"));
+        assert!(is_truecolor("24bit"));
+        assert!(!is_truecolor("256color"));
+        assert!(!is_truecolor(""));
+    }
+
+    #[test]
+    fn colors_resolution_prefers_the_explicit_flag() {
+        assert_eq!(resolve_colors(None, false), ColorMode::Auto);
+        assert_eq!(resolve_colors(None, true), ColorMode::None);
+        assert_eq!(
+            resolve_colors(Some(ColorMode::Truecolor), true),
+            ColorMode::Truecolor,
+            "an explicit --colors wins over NO_COLOR"
+        );
+    }
+
+    #[test]
+    fn non_auto_color_modes_pass_through_resolution() {
+        assert_eq!(ColorMode::Truecolor.resolved(), ColorMode::Truecolor);
+        assert_eq!(ColorMode::Ansi256.resolved(), ColorMode::Ansi256);
+        assert_eq!(ColorMode::None.resolved(), ColorMode::None);
     }
 }

@@ -121,7 +121,13 @@ Flags:
 | `--record <PATH>` | Write each snapshot to a file as a JSON line |
 | `--replay <PATH>` | Replay a recording instead of sampling |
 | `--kill` | Allow `k` to send SIGTERM to the selected process (asks first; re-checks the pid just before signalling) |
+| `--colors <MODE>` | Colour handling: `auto` (default), `truecolor`, `256` or `none` |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
+
+Colours adapt to the terminal: `auto` uses 24-bit RGB when `COLORTERM` is
+`truecolor` or `24bit`, and otherwise snaps every colour to the nearest of the
+256 xterm colours. `--colors 256` forces that mapping, `--colors truecolor`
+forces RGB, and `--colors none` (or `NO_COLOR`) draws without colour.
 
 `procquarium --dump` (hidden) prints the process table as a plain table and
 exits; it's handy for checking what the aquarium would see on another machine.
