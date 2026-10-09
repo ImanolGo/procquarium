@@ -1,6 +1,6 @@
 [package]
 name = "procquarium"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 rust-version = "1.95"
 description = "Your running processes, as fish."

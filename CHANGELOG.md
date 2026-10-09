@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-09
+
+### Changed
+
+- `--help` (and `-h`) now list the full set of usage examples and the key
+  bindings, matching the README.
+
 ## [0.3.1] - 2026-10-09
 
 ### Changed
@@ -165,7 +172,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/ImanolGo/procquarium/releases/tag/v0.3.2
 [0.3.1]: https://github.com/ImanolGo/procquarium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.3.0
 [0.2.6]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.6

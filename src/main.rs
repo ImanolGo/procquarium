@@ -22,12 +22,29 @@ use procquarium::source::sysinfo_source::SysinfoSource;
 use procquarium::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
 use procquarium::theme;
 
-const EXAMPLES: &str = "\
+const AFTER_HELP: &str = "\
 Examples:
-  procquarium                 open the tank
-  procquarium --screensaver   any key or mouse event exits
-  procquarium --user $USER    only your own processes
-  procquarium --max-fish 120  a crowded tank";
+  procquarium                      open the tank
+  procquarium --screensaver        any key or mouse event exits
+  procquarium --user $USER         only your own processes
+  procquarium --max-fish 120       a crowded tank
+  procquarium --filter '^rust' --interval 0.5
+  procquarium --feed               drop food with f
+  procquarium --seed 7             the same tank every time
+  procquarium --config theme.toml  your own colours and sprites
+  procquarium --record run.jsonl   save a session
+  procquarium --replay run.jsonl   play it back later
+
+Keys while running:
+  q / Esc          quit
+  Space            pause the tank
+  l                show or hide process names
+  Tab / Shift+Tab  cycle fish and show details (PID, CPU, memory)
+  + / -            more or fewer fish
+  f                drop food (with --feed)
+  /                search for a process by name
+  k                send SIGTERM to the selected process (with --kill)
+  click a fish     select it (click empty water to clear)";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -38,7 +55,7 @@ Examples:
 Big fish use a lot of memory, fast fish are burning CPU, and when a process exits \
 its fish quietly floats to the surface. Leave it running in a spare pane, or use \
 it as a screensaver.",
-    after_help = EXAMPLES
+    after_help = AFTER_HELP
 )]
 struct Cli {
     /// Seconds between process samples.
