@@ -18,19 +18,32 @@ pub const JELLYFISH: &str = "~(°°)~";
 /// The default ASCII jellyfish.
 pub const JELLYFISH_ASCII: &str = "~(oo)~";
 
-/// Mirror a right-facing sprite into a left-facing one by swapping the bracket
-/// and arrow characters. The eye is symmetric and passes through unchanged.
+/// Mirror a right-facing sprite into a left-facing one by reversing the
+/// character order and swapping the mirrored glyphs. Swapping alone is not
+/// enough: the eye and tail have to change ends too.
 pub fn mirror(chars: &[char]) -> Vec<char> {
-    chars
-        .iter()
-        .map(|&c| match c {
-            '>' => '<',
-            '<' => '>',
-            '(' => ')',
-            ')' => '(',
-            other => other,
-        })
-        .collect()
+    chars.iter().rev().map(|&c| swap(c)).collect()
+}
+
+/// The left/right partner of a glyph, for [`mirror`].
+fn swap(c: char) -> char {
+    match c {
+        '>' => '<',
+        '<' => '>',
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '/' => '\\',
+        '\\' => '/',
+        '«' => '»',
+        '»' => '«',
+        '‹' => '›',
+        '›' => '‹',
+        other => other,
+    }
 }
 
 /// The eye glyph for a fish.
@@ -163,12 +176,17 @@ mod tests {
     }
 
     #[test]
-    fn mirror_swaps_brackets_and_arrows() {
+    fn mirror_swaps_and_reverses() {
         assert_eq!(
             mirror(&['>', '<', '(', '°', '>']),
-            vec!['<', '>', ')', '°', '<']
+            vec!['<', '°', ')', '>', '<']
         );
         assert_eq!(mirror(&['>', '<', '>']), vec!['<', '>', '<']);
+        // A theme can use other bracket pairs.
+        assert_eq!(
+            mirror(&['[', ']', '{', '}', '/', '\\']),
+            vec!['/', '\\', '{', '}', '[', ']']
+        );
     }
 
     #[test]
@@ -195,7 +213,11 @@ mod tests {
     fn left_facing_is_mirrored() {
         assert_eq!(
             sprite(1, true, false, false),
-            "<>)°<".chars().collect::<Vec<_>>()
+            "<°)><".chars().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            sprite(3, true, false, false),
+            "<°)))><".chars().collect::<Vec<_>>()
         );
     }
 
@@ -219,7 +241,7 @@ mod tests {
 
         let mut mirrored = Vec::new();
         Sprites::default().dead_fish_into(&mut mirrored, 2, true, false);
-        assert_eq!(mirrored, ">))✕<".chars().collect::<Vec<_>>());
+        assert_eq!(mirrored, "<✕))>".chars().collect::<Vec<_>>());
     }
 
     #[test]
