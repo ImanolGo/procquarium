@@ -89,6 +89,12 @@ pub trait ProcessSource {
 
     /// Undo every boost (called on the way out).
     fn restore_all_priorities(&mut self) {}
+
+    /// Send SIGTERM to a process. Opt-in (`--kill`); returns whether the signal
+    /// was delivered. The default is a no-op.
+    fn kill_term(&mut self, _pid: u32) -> bool {
+        false
+    }
 }
 
 /// Result of a [`ProcessSource::boost_priority`] attempt.

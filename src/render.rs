@@ -158,6 +158,25 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 style,
             );
         }
+        if let Some(info) = app.kill_prompt() {
+            let y = area.bottom() as i32 - 1;
+            let style = Style::default()
+                .bg(PANEL_BG)
+                .fg(PANEL_FG)
+                .add_modifier(Modifier::BOLD);
+            for x in area.x..area.right() {
+                put(
+                    buf,
+                    area,
+                    i32::from(x),
+                    y,
+                    ' ',
+                    Style::default().bg(PANEL_BG),
+                );
+            }
+            let text = format!("send SIGTERM to {} ({})? y/n", info.name, info.pid);
+            draw_text(buf, area, i32::from(area.x) + 1, y, &text, style);
+        }
     }
 
     // NO_COLOR: keep the glyphs but drop every colour and attribute.

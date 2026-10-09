@@ -183,6 +183,14 @@ impl ProcessSource for SysinfoSource {
     fn boost_priority(&mut self, _id: (u32, u64)) -> PriorityBoost {
         PriorityBoost::Unsupported
     }
+
+    fn kill_term(&mut self, pid: u32) -> bool {
+        use sysinfo::{Pid, Signal};
+        self.system
+            .process(Pid::from_u32(pid))
+            .and_then(|process| process.kill_with(Signal::Term))
+            .unwrap_or(false)
+    }
 }
 
 /// The real `getpriority`/`setpriority` calls.

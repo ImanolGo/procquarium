@@ -25,6 +25,7 @@ pub enum Event {
 enum Command {
     Boost((u32, u64)),
     Restore((u32, u64)),
+    Kill(u32),
     Shutdown,
 }
 
@@ -78,6 +79,11 @@ impl Sampler {
     /// Ask the worker to undo a nudge.
     pub fn restore(&self, id: (u32, u64)) {
         let _ = self.commands.send(Command::Restore(id));
+    }
+
+    /// Ask the worker to send SIGTERM to a process.
+    pub fn kill(&self, pid: u32) {
+        let _ = self.commands.send(Command::Kill(pid));
     }
 
     /// Non-blocking poll for the next event.
@@ -135,6 +141,9 @@ fn worker<S>(
                     }
                 }
                 Ok(Command::Restore(id)) => source.restore_priority(id),
+                Ok(Command::Kill(pid)) => {
+                    source.kill_term(pid);
+                }
                 Err(RecvTimeoutError::Timeout) => break,
             }
         }

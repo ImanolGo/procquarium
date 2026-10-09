@@ -36,6 +36,8 @@ pub struct Config {
     pub record: Option<std::path::PathBuf>,
     /// Replay snapshots from this recording instead of sampling.
     pub replay: Option<std::path::PathBuf>,
+    /// Allow `k` to send SIGTERM to the selected process (opt-in).
+    pub kill: bool,
     /// Draw in the terminal's default colours (`NO_COLOR`).
     pub mono: bool,
     /// Colours and sprites, optionally loaded from a config file.
@@ -66,6 +68,7 @@ pub struct ConfigBuilder {
     no_mouse: bool,
     record: Option<std::path::PathBuf>,
     replay: Option<std::path::PathBuf>,
+    kill: bool,
 }
 
 impl Default for ConfigBuilder {
@@ -84,6 +87,7 @@ impl Default for ConfigBuilder {
             no_mouse: false,
             record: None,
             replay: None,
+            kill: false,
         }
     }
 }
@@ -154,6 +158,11 @@ impl ConfigBuilder {
         self
     }
 
+    pub fn kill(mut self, kill: bool) -> Self {
+        self.kill = kill;
+        self
+    }
+
     /// Validate and build the config, with a clear error for anything invalid.
     pub fn build(self) -> Result<Config> {
         if !self.interval_secs.is_finite() || self.interval_secs <= 0.0 {
@@ -197,6 +206,7 @@ impl ConfigBuilder {
             no_mouse: self.no_mouse,
             record: self.record,
             replay: self.replay,
+            kill: self.kill,
             mono: std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
             theme: Theme::default(),
         })

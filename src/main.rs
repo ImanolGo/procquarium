@@ -99,6 +99,10 @@ struct Cli {
     #[arg(long, value_name = "PATH")]
     replay: Option<std::path::PathBuf>,
 
+    /// Allow `k` to send SIGTERM to the selected process (asks first).
+    #[arg(long)]
+    kill: bool,
+
     /// Print one snapshot as a table and exit.
     #[arg(long, hide = true)]
     dump: bool,
@@ -120,6 +124,7 @@ fn main() -> Result<()> {
         .no_mouse(cli.no_mouse)
         .record(cli.record)
         .replay(cli.replay)
+        .kill(cli.kill)
         .build()?;
 
     if config.dump {
@@ -227,6 +232,9 @@ fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Re
         for id in app.take_pending_restores() {
             sampler.restore(id);
         }
+        for pid in app.take_pending_kills() {
+            sampler.kill(pid);
+        }
 
         terminal.draw(|frame| render::draw(frame, &app))?;
     }
@@ -255,6 +263,15 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
                 }
                 return false;
             }
+            // A pending kill asks a yes/no question.
+            if app.kill_prompt().is_some() {
+                match key.code {
+                    KeyCode::Char('y') => app.confirm_kill(),
+                    KeyCode::Esc | KeyCode::Char('n') => app.cancel_kill(),
+                    _ => {}
+                }
+                return false;
+            }
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return true,
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -264,6 +281,7 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
                 KeyCode::Char('l') => app.show_labels = !app.show_labels,
                 KeyCode::Char('f') => app.drop_food(),
                 KeyCode::Char('/') => app.start_search(),
+                KeyCode::Char('k') => app.start_kill(),
                 KeyCode::Tab => app.select_next(key.modifiers.contains(KeyModifiers::SHIFT)),
                 KeyCode::BackTab => app.select_next(true),
                 KeyCode::Char('+') | KeyCode::Char('=') => app.adjust_max_fish(10),

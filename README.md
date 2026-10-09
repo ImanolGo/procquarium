@@ -96,6 +96,7 @@ Keys while it's running:
 | `f` | Drop food (with `--feed`) |
 | Click a fish | Select it (click empty water to clear) |
 | `/` | Search for a process by name |
+| `k` | Send SIGTERM to the selected process (with `--kill`) |
 
 Flags:
 
@@ -113,6 +114,7 @@ Flags:
 | `--config <PATH>` | Load a theme from a TOML file |
 | `--record <PATH>` | Write each snapshot to a file as a JSON line |
 | `--replay <PATH>` | Replay a recording instead of sampling |
+| `--kill` | Allow `k` to send SIGTERM to the selected process (asks first) |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
 
 `procquarium --dump` (hidden) prints the process table as a plain table and

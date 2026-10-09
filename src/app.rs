@@ -38,6 +38,10 @@ pub struct App {
     search: Option<String>,
     /// Selection to restore if the search is cancelled.
     search_prev: Option<u32>,
+    /// A pending "send SIGTERM to ...?" confirmation.
+    confirm: Option<ProcInfo>,
+    /// Pids to signal, drained by the main loop.
+    pending_kills: Vec<u32>,
 }
 
 /// How many CPU samples to remember, and how many to draw.
@@ -63,6 +67,8 @@ impl App {
             history: HashMap::new(),
             search: None,
             search_prev: None,
+            confirm: None,
+            pending_kills: Vec::new(),
         }
     }
 
@@ -174,6 +180,41 @@ impl App {
     /// The active search query, when `/` is open.
     pub fn search_query(&self) -> Option<&str> {
         self.search.as_deref()
+    }
+
+    /// Ask to kill the selected fish: only with `--kill`, and only for a real
+    /// selection. The confirmation prompt is shown until answered.
+    pub fn start_kill(&mut self) {
+        if !self.config.kill {
+            return;
+        }
+        if let Some(fish) = self.selected_fish() {
+            self.confirm = Some(fish.info.clone());
+        }
+    }
+
+    /// The pending kill confirmation, if any.
+    pub fn kill_prompt(&self) -> Option<&ProcInfo> {
+        self.confirm.as_ref()
+    }
+
+    /// Confirm the kill: queue the signal for our own processes only.
+    pub fn confirm_kill(&mut self) {
+        if let Some(info) = self.confirm.take()
+            && owns_process(&info, self.self_user.as_deref())
+        {
+            self.pending_kills.push(info.pid);
+        }
+    }
+
+    /// Dismiss the kill confirmation.
+    pub fn cancel_kill(&mut self) {
+        self.confirm = None;
+    }
+
+    /// Pids to signal since the last call.
+    pub fn take_pending_kills(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.pending_kills)
     }
 
     /// Open the search line, remembering the selection to restore on cancel.
@@ -428,6 +469,55 @@ mod tests {
 
     fn config_max(n: usize) -> Config {
         Config::builder().max_fish(n).build().expect("valid")
+    }
+
+    #[test]
+    fn kill_is_opt_in_and_only_for_own_processes() {
+        // Without --kill, k does nothing.
+        let mut app = App::new(config(), 80, 24, 1);
+        app.apply_snapshot(snapshot(vec![proc(1, "a").with_user("me")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.self_user = Some("me".into());
+        app.selected = Some(1);
+        app.start_kill();
+        assert!(app.kill_prompt().is_none(), "off without --kill");
+
+        // With --kill and ownership, it queues after confirmation.
+        let mut app = App::new(
+            Config::builder().kill(true).build().expect("valid"),
+            80,
+            24,
+            1,
+        );
+        app.apply_snapshot(snapshot(vec![proc(1, "a").with_user("me")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.self_user = Some("me".into());
+        app.selected = Some(1);
+        app.start_kill();
+        assert!(app.kill_prompt().is_some());
+        app.confirm_kill();
+        assert_eq!(app.take_pending_kills(), vec![1]);
+
+        // Someone else's process is refused.
+        let mut app = App::new(
+            Config::builder().kill(true).build().expect("valid"),
+            80,
+            24,
+            1,
+        );
+        app.apply_snapshot(snapshot(vec![proc(1, "a").with_user("root")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.self_user = Some("me".into());
+        app.selected = Some(1);
+        app.start_kill();
+        app.confirm_kill();
+        assert!(app.take_pending_kills().is_empty());
     }
 
     #[test]
