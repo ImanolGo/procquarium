@@ -96,13 +96,30 @@ impl Tank {
         }
     }
 
-    /// True if this pid is already represented by a fish or egg.
-    pub fn contains(&self, pid: u32) -> bool {
-        self.fish.iter().any(|f| f.pid == pid) || self.eggs.iter().any(|e| e.pid == pid)
+    /// True if this process is already represented by a living creature or an
+    /// egg. Dying fish (floating corpses) don't count, so a reused PID gets a
+    /// fresh creature while the old one fades.
+    pub fn contains(&self, id: (u32, u64)) -> bool {
+        self.fish
+            .iter()
+            .any(|f| f.state != FishState::Exiting && f.identity() == id)
+            || self.eggs.iter().any(|e| e.info.identity() == id)
+    }
+
+    fn fish_mut(&mut self, id: (u32, u64)) -> Option<&mut Fish> {
+        self.fish
+            .iter_mut()
+            .find(|f| f.state != FishState::Exiting && f.identity() == id)
+    }
+
+    fn living_fish_mut(&mut self, pid: u32) -> Option<&mut Fish> {
+        self.fish
+            .iter_mut()
+            .find(|f| f.pid == pid && f.state != FishState::Exiting)
     }
 
     fn ensure_egg(&mut self, info: ProcInfo) {
-        if self.contains(info.pid) {
+        if self.contains(info.identity()) {
             return;
         }
         let max_x = (self.width.max(4) as f32 - 2.0).max(3.0);
@@ -120,7 +137,7 @@ impl Tank {
     /// Add the creature for a newly selected process: fish hatch from eggs,
     /// crabs and jellyfish appear directly.
     fn ensure_creature(&mut self, info: ProcInfo) {
-        if self.contains(info.pid) {
+        if self.contains(info.identity()) {
             return;
         }
         match CreatureKind::for_info(&info) {
@@ -151,39 +168,81 @@ impl Tank {
             .push(Fish::new(info, (x, y), home_y, phase, facing, kind));
     }
 
-    /// Apply process events, then make any fish that is no longer in the
-    /// selected set swim away.
-    pub fn apply(&mut self, events: &[ProcEvent], selected: &HashSet<u32>) {
+    /// Apply process events, then reconcile against the current selection.
+    ///
+    /// Reconciliation matters because a process can enter the top N without an
+    /// event of its own (a bigger one exited, and its own numbers didn't
+    /// change), so we can't rely on events alone to create creatures.
+    pub fn apply(&mut self, events: &[ProcEvent], selected: &[ProcInfo]) {
+        let selected_ids: HashSet<(u32, u64)> = selected.iter().map(|p| p.identity()).collect();
+
         for event in events {
             match event {
                 ProcEvent::Spawned(info) => {
-                    if selected.contains(&info.pid) {
+                    if selected_ids.contains(&info.identity()) {
                         self.ensure_creature(info.clone());
                     }
                 }
                 ProcEvent::Exited { pid } => {
-                    self.eggs.retain(|e| e.pid != *pid);
-                    if let Some(f) = self.fish.iter_mut().find(|f| f.pid == *pid) {
+                    self.eggs.retain(|e| e.info.pid != *pid);
+                    if let Some(f) = self.living_fish_mut(*pid) {
                         f.begin_exit();
                     }
                 }
                 ProcEvent::Changed(info) => {
-                    if let Some(f) = self.fish.iter_mut().find(|f| f.pid == info.pid) {
+                    if let Some(f) = self.fish_mut(info.identity()) {
                         f.apply_info(info.clone());
-                    } else if selected.contains(&info.pid) {
+                    }
+                }
+            }
+        }
+
+        // Every selected process must have a living creature; a leaving one that
+        // is selected again turns around instead of being replaced.
+        for info in selected {
+            let id = info.identity();
+            match self
+                .fish
+                .iter()
+                .find(|f| f.state != FishState::Exiting && f.identity() == id)
+                .map(|f| f.state)
+            {
+                Some(FishState::Leaving) => {
+                    if let Some(f) = self.fish_mut(id) {
+                        f.state = FishState::Alive;
+                        f.timer = 0.0;
+                    }
+                }
+                Some(_) => {}
+                None => {
+                    if !self.contains(id) {
                         self.ensure_creature(info.clone());
                     }
                 }
             }
         }
 
+        // Eggs for processes that fell out of the selection are abandoned.
+        self.eggs
+            .retain(|e| selected_ids.contains(&e.info.identity()));
+
+        // Anything selected no longer gets to stay: swim away.
         let w = self.width as f32;
         for f in &mut self.fish {
-            if f.state == FishState::Alive && !selected.contains(&f.pid) {
+            if f.state == FishState::Alive && !selected_ids.contains(&f.identity()) {
                 let dir = if f.pos.0 < w / 2.0 { -1.0 } else { 1.0 };
                 f.begin_leaving(dir);
             }
         }
+    }
+
+    /// Creatures that are alive or leaving (i.e. not floating corpses). Eggs
+    /// don't count.
+    pub fn living_count(&self) -> usize {
+        self.fish
+            .iter()
+            .filter(|f| f.state != FishState::Exiting)
+            .count()
     }
 
     /// Advance the whole tank by `dt` seconds.
@@ -310,12 +369,25 @@ impl Tank {
     }
 
     /// Fish pids in a stable order (as they appear in the tank), for cycling.
+    /// Dying fish are skipped so the selection can't land on a corpse.
     pub fn fish_pids(&self) -> Vec<u32> {
-        self.fish.iter().map(|f| f.pid).collect()
+        self.fish
+            .iter()
+            .filter(|f| f.state != FishState::Exiting)
+            .map(|f| f.pid)
+            .collect()
     }
 
+    /// The living creature for a pid, if any.
     pub fn fish(&self, pid: u32) -> Option<&Fish> {
-        self.fish.iter().find(|f| f.pid == pid)
+        self.fish
+            .iter()
+            .find(|f| f.pid == pid && f.state != FishState::Exiting)
+    }
+
+    /// Whether a pid is represented by a living creature.
+    pub fn has_living(&self, pid: u32) -> bool {
+        self.fish(pid).is_some()
     }
 }
 
@@ -325,25 +397,23 @@ mod tests {
     use crate::source::ProcStatus;
     use crate::source::fake::proc;
 
-    fn selected(pids: &[u32]) -> HashSet<u32> {
-        pids.iter().copied().collect()
+    fn spawn(info: &ProcInfo) -> ProcEvent {
+        ProcEvent::Spawned(info.clone())
     }
 
     #[test]
     fn spawn_event_produces_an_egg_then_a_fish() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        let shell = proc(1, "shell");
+        tank.apply(&[spawn(&shell)], &[shell]);
         assert_eq!(tank.eggs.len(), 1);
         assert!(tank.fish.is_empty());
 
-        // Half a second: still an egg.
         for _ in 0..50 {
             tank.update(0.01);
         }
-        assert!(tank.fish.is_empty());
+        assert!(tank.fish.is_empty(), "still an egg");
 
-        // Another second: hatched.
         for _ in 0..100 {
             tank.update(0.01);
         }
@@ -354,14 +424,14 @@ mod tests {
     #[test]
     fn exit_event_makes_the_fish_float_and_disappear() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        let shell = proc(1, "shell");
+        tank.apply(&[spawn(&shell)], &[shell]);
         for _ in 0..150 {
             tank.update(0.01);
         }
         assert_eq!(tank.fish.len(), 1);
 
-        tank.apply(&[ProcEvent::Exited { pid: 1 }], &selected(&[]));
+        tank.apply(&[ProcEvent::Exited { pid: 1 }], &[]);
         assert_eq!(tank.fish[0].state, FishState::Exiting);
         for _ in 0..500 {
             tank.update(0.05);
@@ -372,14 +442,14 @@ mod tests {
     #[test]
     fn dropping_out_of_top_n_swims_away_without_dying() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        let shell = proc(1, "shell");
+        tank.apply(&[spawn(&shell)], &[shell]);
         for _ in 0..150 {
             tank.update(0.01);
         }
         assert_eq!(tank.fish.len(), 1);
 
-        tank.apply(&[], &selected(&[]));
+        tank.apply(&[], &[]);
         assert_eq!(tank.fish[0].state, FishState::Leaving);
         for _ in 0..500 {
             tank.update(0.05);
@@ -390,7 +460,7 @@ mod tests {
     #[test]
     fn unselected_spawn_gets_no_egg() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &selected(&[]));
+        tank.apply(&[spawn(&proc(1, "shell"))], &[]);
         assert!(tank.eggs.is_empty());
         assert!(tank.fish.is_empty());
     }
@@ -400,7 +470,8 @@ mod tests {
         // Some terminals briefly report zero columns at startup.
         for (w, h) in [(0, 0), (1, 1), (2, 3), (4, 4)] {
             let mut tank = Tank::new(w, h, 60, 1);
-            tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &selected(&[1]));
+            let shell = proc(1, "shell");
+            tank.apply(&[spawn(&shell)], &[shell]);
             for _ in 0..200 {
                 tank.update(0.05);
             }
@@ -410,8 +481,8 @@ mod tests {
     #[test]
     fn zombie_fish_stays_in_the_tank() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        let shell = proc(1, "shell");
+        tank.apply(&[spawn(&shell)], std::slice::from_ref(&shell));
         for _ in 0..150 {
             tank.update(0.01);
         }
@@ -419,7 +490,7 @@ mod tests {
             &[ProcEvent::Changed(
                 proc(1, "shell").with_status(ProcStatus::Zombie),
             )],
-            &sel,
+            &[shell],
         );
         for _ in 0..200 {
             tank.update(0.01);
@@ -431,11 +502,8 @@ mod tests {
     #[test]
     fn container_processes_become_jellyfish() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(
-            &[ProcEvent::Spawned(proc(1, "nginx").container_process())],
-            &sel,
-        );
+        let nginx = proc(1, "nginx").container_process();
+        tank.apply(&[spawn(&nginx)], &[nginx]);
         assert!(tank.eggs.is_empty());
         assert_eq!(tank.fish.len(), 1);
         assert_eq!(tank.fish[0].kind, CreatureKind::Jellyfish);
@@ -444,11 +512,8 @@ mod tests {
     #[test]
     fn kernel_threads_become_crabs_on_the_sand() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(
-            &[ProcEvent::Spawned(proc(1, "kworker").kernel_thread())],
-            &sel,
-        );
+        let kworker = proc(1, "kworker").kernel_thread();
+        tank.apply(&[spawn(&kworker)], &[kworker]);
         assert_eq!(tank.fish.len(), 1);
         assert_eq!(tank.fish[0].kind, CreatureKind::Crab);
         for _ in 0..100 {
@@ -460,8 +525,8 @@ mod tests {
     #[test]
     fn a_fish_that_reaches_food_eats_it() {
         let mut tank = Tank::new(80, 24, 60, 1);
-        let sel = selected(&[1]);
-        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        let shell = proc(1, "shell");
+        tank.apply(&[spawn(&shell)], &[shell]);
         for _ in 0..150 {
             tank.update(0.01);
         }
@@ -479,5 +544,86 @@ mod tests {
         }
         assert!(ate, "fish should reach and eat the pellet");
         assert!(tank.food.is_empty(), "the pellet should be gone");
+    }
+
+    #[test]
+    fn promoted_process_gets_a_creature_without_its_own_event() {
+        // max_fish = 1. The big process is selected first; when it exits the
+        // small one is promoted even though its own numbers never changed, so
+        // diff reports nothing for it.
+        let mut tank = Tank::new(80, 24, 1, 1);
+        let big = proc(1, "big").with_memory(900 * 1024 * 1024);
+        let small = proc(2, "small").with_memory(10 * 1024 * 1024);
+        tank.apply(&[spawn(&big), spawn(&small)], &[big]);
+        for _ in 0..150 {
+            tank.update(0.01);
+        }
+        assert_eq!(tank.living_count(), 1);
+
+        tank.apply(&[ProcEvent::Exited { pid: 1 }], &[small]);
+        for _ in 0..150 {
+            tank.update(0.01);
+        }
+        assert_eq!(
+            tank.living_count(),
+            1,
+            "the promoted process got a creature"
+        );
+        assert!(
+            tank.fish
+                .iter()
+                .any(|f| f.pid == 2 && f.state != FishState::Exiting)
+        );
+    }
+
+    #[test]
+    fn pid_reuse_gets_a_new_creature_while_the_corpse_floats() {
+        let mut tank = Tank::new(80, 24, 60, 1);
+        let old = proc(1, "old").with_start_time(10);
+        tank.apply(&[spawn(&old)], &[old]);
+        for _ in 0..150 {
+            tank.update(0.01);
+        }
+        tank.apply(&[ProcEvent::Exited { pid: 1 }], &[]);
+        assert_eq!(tank.fish[0].state, FishState::Exiting);
+
+        let new = proc(1, "new").with_start_time(20);
+        tank.apply(&[spawn(&new)], &[new]);
+        assert!(
+            tank.contains((1, 20)),
+            "the reused PID must get its own creature"
+        );
+    }
+
+    #[test]
+    fn re_selected_leaving_fish_turns_around() {
+        let mut tank = Tank::new(80, 24, 60, 1);
+        let shell = proc(1, "shell");
+        tank.apply(&[spawn(&shell)], std::slice::from_ref(&shell));
+        for _ in 0..150 {
+            tank.update(0.01);
+        }
+        tank.apply(&[], &[]);
+        assert_eq!(tank.fish[0].state, FishState::Leaving);
+
+        tank.apply(&[], &[shell]);
+        assert_eq!(tank.fish[0].state, FishState::Alive);
+        assert_eq!(
+            tank.fish.len(),
+            1,
+            "it turned around rather than duplicating"
+        );
+    }
+
+    #[test]
+    fn reconcile_keeps_exactly_the_selected_creatures() {
+        let mut tank = Tank::new(80, 24, 60, 1);
+        let procs: Vec<ProcInfo> = (1..=5).map(|i| proc(i, "p")).collect();
+        let events: Vec<ProcEvent> = procs.iter().map(spawn).collect();
+        tank.apply(&events, &procs[..3]);
+        for _ in 0..150 {
+            tank.update(0.01);
+        }
+        assert_eq!(tank.living_count(), 3);
     }
 }

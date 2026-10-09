@@ -1,7 +1,6 @@
 //! Application state: the tank plus everything the UI needs.
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
 
 use crate::config::Config;
 use crate::diff;
@@ -52,7 +51,7 @@ impl App {
     /// Feed a fresh snapshot: diff it, pick the top processes, and update the tank.
     pub fn apply_snapshot(&mut self, snapshot: Snapshot) {
         let events = diff::diff(&self.prev, &snapshot);
-        let selected: HashSet<u32> = select_pids(&snapshot, &self.config).into_iter().collect();
+        let selected = select_procs(&snapshot, &self.config);
         self.tank.apply(&events, &selected);
         self.load = snapshot.load;
         self.self_user = snapshot
@@ -64,7 +63,7 @@ impl App {
         self.status = None;
 
         if let Some(pid) = self.selected
-            && !self.tank.contains(pid)
+            && !self.tank.has_living(pid)
         {
             self.selected = None;
         }
@@ -148,7 +147,7 @@ const CRAB_LIMIT: usize = 6;
 /// Choose which processes appear: apply the filters, rank ordinary processes by
 /// score and keep the top `max_fish`. With `--kernel`, a handful of kernel
 /// threads are added as crabs beyond the fish budget. Pure, so easy to test.
-pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
+pub fn select_procs(snapshot: &Snapshot, config: &Config) -> Vec<ProcInfo> {
     let passes = |p: &ProcInfo| -> bool {
         config
             .user
@@ -170,7 +169,7 @@ pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
     });
     fish.truncate(config.max_fish);
 
-    let mut pids: Vec<u32> = fish.into_iter().map(|p| p.pid).collect();
+    let mut selected: Vec<ProcInfo> = fish.into_iter().cloned().collect();
 
     if config.kernel {
         let mut crabs: Vec<&ProcInfo> = snapshot
@@ -184,10 +183,18 @@ pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.pid.cmp(&b.pid))
         });
-        pids.extend(crabs.into_iter().take(CRAB_LIMIT).map(|p| p.pid));
+        selected.extend(crabs.into_iter().take(CRAB_LIMIT).cloned());
     }
 
-    pids
+    selected
+}
+
+/// The selected processes' pids, in ranking order.
+pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
+    select_procs(snapshot, config)
+        .into_iter()
+        .map(|p| p.pid)
+        .collect()
 }
 
 /// Whether we are allowed to touch this process's priority: only our own.
@@ -282,9 +289,9 @@ mod tests {
     fn dropping_pids_makes_fish_leave() {
         use crate::diff::ProcEvent;
         let mut app = App::new(config(), 80, 24, 1);
-        let sel: HashSet<u32> = [1u32].into_iter().collect();
+        let shell = proc(1, "shell");
         app.tank
-            .apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+            .apply(&[ProcEvent::Spawned(shell.clone())], &[shell]);
         for _ in 0..150 {
             app.update(0.01);
         }

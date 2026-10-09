@@ -161,6 +161,11 @@ impl Fish {
         self.info.status == ProcStatus::Zombie
     }
 
+    /// The process identity `(pid, start_time)` this creature stands for.
+    pub fn identity(&self) -> (u32, u64) {
+        self.info.identity()
+    }
+
     /// Advance one frame. `w`/`h` are the tank size in cells; `parent` is the
     /// parent fish's position if it is currently in the tank, and `food` is the
     /// nearest pellet, if any.
