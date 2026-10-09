@@ -26,13 +26,34 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 
 ## Install
 
-You'll need a recent stable Rust toolchain.
+### Prebuilt binary
+
+Each [release](https://github.com/ImanolGo/procquarium/releases) ships Linux,
+macOS and Windows binaries plus installers:
 
 ```sh
-cargo install --git https://github.com/ImanolGo/procquarium
+# Linux / macOS
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/ImanolGo/procquarium/releases/latest/download/procquarium-installer.sh | sh
 ```
 
-Once it's on crates.io, `cargo install procquarium` will do.
+```powershell
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/ImanolGo/procquarium/releases/latest/download/procquarium-installer.ps1 | iex"
+```
+
+There is also a `.msi` for Windows and `.tar.xz` archives for each platform.
+
+### With a Rust toolchain
+
+```sh
+cargo install procquarium
+```
+
+### Arch Linux
+
+The `PKGBUILD` lives in [`packaging/aur`](packaging/aur); an AUR package is
+coming.
 
 ## Usage
 
