@@ -24,6 +24,10 @@ pub struct App {
     pub load: f32,
     prev: Snapshot,
     pub tick: f32,
+    /// Username of our own process, so we never feed another user's processes.
+    self_user: Option<String>,
+    /// Pids that ate since the last drain and are due a priority nudge.
+    pending_boosts: Vec<u32>,
 }
 
 impl App {
@@ -40,6 +44,8 @@ impl App {
             load: 0.0,
             prev: Snapshot::default(),
             tick: 0.0,
+            self_user: None,
+            pending_boosts: Vec::new(),
         }
     }
 
@@ -49,6 +55,10 @@ impl App {
         let selected: HashSet<u32> = select_pids(&snapshot, &self.config).into_iter().collect();
         self.tank.apply(&events, &selected);
         self.load = snapshot.load;
+        self.self_user = snapshot
+            .procs
+            .get(&std::process::id())
+            .and_then(|p| p.user.clone());
         self.prev = snapshot;
         self.ready = true;
         self.status = None;
@@ -65,6 +75,36 @@ impl App {
         if !self.paused {
             self.tank.update(dt);
         }
+
+        // Anything that ate and is ours becomes a pending priority nudge.
+        for pid in self.tank.take_eaten() {
+            let owned = self
+                .tank
+                .fish(pid)
+                .map(|f| owns_process(&f.info, self.self_user.as_deref()))
+                .unwrap_or(false);
+            if self.config.feed && owned {
+                self.pending_boosts.push(pid);
+            }
+        }
+    }
+
+    /// Drop a pellet of food: above the selected fish if there is one, otherwise
+    /// at a random spot. Only does anything when `--feed` is enabled.
+    pub fn drop_food(&mut self) {
+        if !self.config.feed {
+            return;
+        }
+        let x = self
+            .selected
+            .and_then(|pid| self.tank.fish(pid))
+            .map(|f| f.pos.0);
+        self.tank.drop_food(x);
+    }
+
+    /// Take the pids that should be reniced since the last call.
+    pub fn take_pending_boosts(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.pending_boosts)
     }
 
     pub fn resize(&mut self, width: u16, height: u16) {
@@ -150,13 +190,21 @@ pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
     pids
 }
 
+/// Whether we are allowed to touch this process's priority: only our own.
+pub fn owns_process(info: &ProcInfo, self_user: Option<&str>) -> bool {
+    match self_user {
+        Some(me) => info.user.as_deref() == Some(me),
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::source::fake::{proc, snapshot};
 
     fn config() -> Config {
-        Config::new(1.0, 60, None, None, false, false, false, None, false).expect("valid")
+        Config::new(1.0, 60, None, None, false, false, false, false, None, false).expect("valid")
     }
 
     #[test]
@@ -273,5 +321,25 @@ mod tests {
             app.tank.fish[0].state,
             crate::tank::fish::FishState::Exiting
         );
+    }
+
+    #[test]
+    fn only_own_processes_can_be_fed() {
+        let mine = proc(1, "a").with_user("imanolgo");
+        let theirs = proc(2, "b").with_user("root");
+        assert!(owns_process(&mine, Some("imanolgo")));
+        assert!(!owns_process(&theirs, Some("imanolgo")));
+        assert!(!owns_process(&mine, None));
+    }
+
+    #[test]
+    fn food_is_ignored_unless_feeding_is_enabled() {
+        let mut app = App::new(config(), 80, 24, 1);
+        app.drop_food();
+        assert!(app.tank.food.is_empty());
+
+        app.config.feed = true;
+        app.drop_food();
+        assert_eq!(app.tank.food.len(), 1);
     }
 }

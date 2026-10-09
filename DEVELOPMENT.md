@@ -102,6 +102,10 @@ one commit each:
   Kernel threads score near zero so they get reserved slots rather than
   competing for fish; container detection reads `/proc/<pid>/cgroup` on Linux
   and is cached per process, so it costs nothing after the first sample.
+- **Feeding.** With `--feed`, `f` drops a pellet that sinks; a fish that reaches
+  one eats it and glows, and its process gets a one-step `setpriority` nudge
+  (via `libc`). It only ever touches processes owned by you, and reports when
+  the kernel refuses the change (`Denied`) instead of pretending it worked.
 
 ## Running it
 

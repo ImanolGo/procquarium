@@ -30,10 +30,23 @@ pub struct Egg {
     pub phase: f32,
 }
 
+/// A pellet of food that sinks through the water.
+#[derive(Debug, Clone)]
+pub struct Food {
+    pub x: f32,
+    pub y: f32,
+    pub vy: f32,
+}
+
+/// The most pellets we keep on screen at once.
+const FOOD_LIMIT: usize = 40;
+
 /// The aquarium: fish, eggs and decor.
 pub struct Tank {
     pub fish: Vec<Fish>,
     pub eggs: Vec<Egg>,
+    /// Pellets of food falling through the water.
+    pub food: Vec<Food>,
     pub decor: Decor,
     pub width: u16,
     pub height: u16,
@@ -41,6 +54,8 @@ pub struct Tank {
     pub time: f32,
     /// Count of fish hatched this run, for the status line.
     pub hatched: u64,
+    /// Pids that ate since the last [`Tank::take_eaten`].
+    eaten: Vec<u32>,
     rng: ChaCha8Rng,
 }
 
@@ -52,12 +67,14 @@ impl Tank {
         Self {
             fish: Vec::new(),
             eggs: Vec::new(),
+            food: Vec::new(),
             decor,
             width,
             height,
             max_fish,
             time: 0.0,
             hatched: 0,
+            eaten: Vec::new(),
             rng,
         }
     }
@@ -208,6 +225,13 @@ impl Tank {
             self.hatched += 1;
         }
 
+        // Drop and sink food.
+        for pellet in &mut self.food {
+            pellet.y += pellet.vy * dt;
+        }
+        self.food.retain(|pellet| pellet.y < h - 1.0);
+        let pellets: Vec<(f32, f32)> = self.food.iter().map(|p| (p.x, p.y)).collect();
+
         // Snapshot parent positions before mutating the fish.
         let positions: HashMap<u32, (f32, f32)> = self
             .fish
@@ -218,12 +242,71 @@ impl Tank {
 
         for f in &mut self.fish {
             let parent = f.info.parent.and_then(|p| positions.get(&p).copied());
-            f.update(dt, w, h, parent);
+            let nearest = if f.kind == CreatureKind::Fish {
+                pellets
+                    .iter()
+                    .copied()
+                    .filter(|(fx, fy)| {
+                        let (dx, dy) = (fx - f.pos.0, fy - f.pos.1);
+                        dx * dx + dy * dy < 400.0
+                    })
+                    .min_by(|a, b| {
+                        let da = (a.0 - f.pos.0).powi(2) + (a.1 - f.pos.1).powi(2);
+                        let db = (b.0 - f.pos.0).powi(2) + (b.1 - f.pos.1).powi(2);
+                        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            } else {
+                None
+            };
+            f.update(dt, w, h, parent, nearest);
         }
+
+        // Fish that reached a pellet eat it; remember who for the priority nudge.
+        let mut eaten = Vec::new();
+        for f in &mut self.fish {
+            if f.kind != CreatureKind::Fish {
+                continue;
+            }
+            if let Some(index) = self
+                .food
+                .iter()
+                .position(|p| (p.x - f.pos.0).abs() < 2.2 && (f.pos.1 - p.y).abs() < 1.6)
+            {
+                f.fed = 2.5;
+                self.eaten.push(f.pid);
+                eaten.push(index);
+            }
+        }
+        eaten.sort_unstable();
+        eaten.dedup();
+        for index in eaten.into_iter().rev() {
+            self.food.remove(index);
+        }
+        self.food.truncate(FOOD_LIMIT);
+
         self.fish.retain(|f| !f.finished());
 
         self.decor
             .update(dt, self.width, self.height, &mut self.rng, &self.fish);
+    }
+
+    /// Drop a pellet at `x`, or a random spot when `None`.
+    pub fn drop_food(&mut self, x: Option<f32>) {
+        if self.food.len() >= FOOD_LIMIT {
+            return;
+        }
+        let w = self.width.max(4) as f32;
+        let x = x.unwrap_or_else(|| self.rng.random_range(1.0..(w - 1.0).max(2.0)));
+        self.food.push(Food {
+            x: x.clamp(1.0, (w - 1.0).max(2.0)),
+            y: 1.0,
+            vy: 0.8,
+        });
+    }
+
+    /// Pids that ate since the last call.
+    pub fn take_eaten(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.eaten)
     }
 
     /// Fish pids in a stable order (as they appear in the tank), for cycling.
@@ -372,5 +455,29 @@ mod tests {
             tank.update(0.05);
         }
         assert_eq!(tank.fish[0].pos.1, 23.0, "crab sits on the sand");
+    }
+
+    #[test]
+    fn a_fish_that_reaches_food_eats_it() {
+        let mut tank = Tank::new(80, 24, 60, 1);
+        let sel = selected(&[1]);
+        tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &sel);
+        for _ in 0..150 {
+            tank.update(0.01);
+        }
+        let x = tank.fish[0].pos.0;
+        tank.drop_food(Some(x));
+        assert_eq!(tank.food.len(), 1);
+
+        let mut ate = false;
+        for _ in 0..800 {
+            tank.update(0.02);
+            if tank.take_eaten().contains(&1) {
+                ate = true;
+                break;
+            }
+        }
+        assert!(ate, "fish should reach and eat the pellet");
+        assert!(tank.food.is_empty(), "the pellet should be gone");
     }
 }

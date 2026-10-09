@@ -18,7 +18,7 @@ use crate::app::App;
 use crate::config::Config;
 use crate::render::human_bytes;
 use crate::source::sysinfo_source::SysinfoSource;
-use crate::source::{ProcStatus, ProcessSource, Snapshot};
+use crate::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
 
 const EXAMPLES: &str = "\
 Examples:
@@ -67,6 +67,11 @@ struct Cli {
     #[arg(long)]
     screensaver: bool,
 
+    /// Let `f` drop food; fish that eat get a small priority nudge (needs
+    /// privileges to raise priority, and only ever touches your own processes).
+    #[arg(long)]
+    feed: bool,
+
     /// Fixed random seed, for a reproducible tank.
     #[arg(long, value_name = "N")]
     seed: Option<u64>,
@@ -86,6 +91,7 @@ fn main() -> Result<()> {
         cli.kernel,
         cli.ascii,
         cli.screensaver,
+        cli.feed,
         cli.seed,
         cli.dump,
     )?;
@@ -159,6 +165,13 @@ fn run(
         last_frame = now;
         app.update(dt);
 
+        // Apply any priority nudges the tank earned this frame.
+        for pid in app.take_pending_boosts() {
+            if source.boost_priority(pid) == PriorityBoost::Denied {
+                app.status = Some(format!("could not renice {pid} (need privileges)"));
+            }
+        }
+
         terminal.draw(|frame| render::draw(frame, &app))?;
     }
 }
@@ -180,6 +193,7 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
                 }
                 KeyCode::Char(' ') => app.paused = !app.paused,
                 KeyCode::Char('l') => app.show_labels = !app.show_labels,
+                KeyCode::Char('f') => app.drop_food(),
                 KeyCode::Tab => app.select_next(key.modifiers.contains(KeyModifiers::SHIFT)),
                 KeyCode::BackTab => app.select_next(true),
                 KeyCode::Char('+') | KeyCode::Char('=') => app.adjust_max_fish(10),

@@ -20,6 +20,9 @@ rand = "0.9"
 rand_chacha = "0.9"
 regex = "1"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 insta = "1"
 

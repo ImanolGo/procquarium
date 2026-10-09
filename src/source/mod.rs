@@ -71,6 +71,22 @@ impl Snapshot {
 /// Something that can hand out process snapshots.
 pub trait ProcessSource {
     fn snapshot(&mut self) -> Result<Snapshot>;
+
+    /// Nudge `pid` towards a slightly higher priority. Opt-in and best-effort:
+    /// on Unix this lowers the nice value, which needs `CAP_SYS_NICE`, so it
+    /// commonly comes back `Denied`. The default is a no-op so fakes and
+    /// platforms without priorities stay quiet.
+    fn boost_priority(&mut self, _pid: u32) -> PriorityBoost {
+        PriorityBoost::Unsupported
+    }
+}
+
+/// Result of a [`ProcessSource::boost_priority`] attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PriorityBoost {
+    Applied,
+    Denied,
+    Unsupported,
 }
 
 #[cfg(test)]

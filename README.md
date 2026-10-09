@@ -32,6 +32,7 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 | A crab scuttling on the sand | A kernel thread (with `--kernel`) |
 | A jellyfish pulsing | A process inside a container (Linux) |
 | Water getting darker | Overall system load rising |
+| A fish glowing after you feed it | You gave its process a small priority nudge (`--feed`) |
 
 ## Install
 
@@ -51,6 +52,7 @@ procquarium --screensaver   # any key or mouse event exits
 procquarium --user $USER    # only your own processes
 procquarium --max-fish 120  # crowded tank
 procquarium --filter '^rust' --interval 0.5
+procquarium --feed           # press f to drop food
 procquarium --seed 7        # the same tank every time
 ```
 
@@ -63,6 +65,7 @@ Keys while it's running:
 | `l` | Show or hide process names |
 | `Tab` / `Shift+Tab` | Cycle through fish and show details (PID, CPU, memory) |
 | `+` / `-` | More or fewer fish |
+| `f` | Drop food (with `--feed`) |
 
 Flags:
 
@@ -75,6 +78,7 @@ Flags:
 | `--kernel` | Include kernel threads (they appear as crabs) |
 | `--ascii` | Use plain ASCII glyphs instead of the Unicode ones |
 | `--screensaver` | Exit on any key or mouse event; no labels or info box |
+| `--feed` | Let `f` drop food; fed fish get a small priority nudge |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
 
 `procquarium --dump` (hidden) prints the process table as a plain table and

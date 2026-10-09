@@ -79,6 +79,8 @@ pub struct Fish {
     pub death: f32,
     /// Horizontal direction used while leaving the tank.
     pub leave_dir: f32,
+    /// Countdown once the fish has eaten something, for a little glow.
+    pub fed: f32,
 }
 
 impl Fish {
@@ -118,6 +120,7 @@ impl Fish {
             timer: 0.0,
             death: 0.0,
             leave_dir: 0.0,
+            fed: 0.0,
         }
     }
 
@@ -159,9 +162,18 @@ impl Fish {
     }
 
     /// Advance one frame. `w`/`h` are the tank size in cells; `parent` is the
-    /// parent fish's position if it is currently in the tank.
-    pub fn update(&mut self, dt: f32, w: f32, h: f32, parent: Option<(f32, f32)>) {
+    /// parent fish's position if it is currently in the tank, and `food` is the
+    /// nearest pellet, if any.
+    pub fn update(
+        &mut self,
+        dt: f32,
+        w: f32,
+        h: f32,
+        parent: Option<(f32, f32)>,
+        food: Option<(f32, f32)>,
+    ) {
         self.age += dt;
+        self.fed = (self.fed - dt).max(0.0);
         let top = 1.0_f32;
         let bottom = (h - 2.0).max(top);
         let margin = 3.0_f32.min(w * 0.25).max(1.0);
@@ -213,13 +225,14 @@ impl Fish {
         }
 
         match self.kind {
-            CreatureKind::Fish => self.alive_fish(dt, w, parent, top, bottom, margin),
+            CreatureKind::Fish => self.alive_fish(dt, w, parent, top, bottom, margin, food),
             CreatureKind::Crab => self.alive_crab(dt, w, bottom),
             CreatureKind::Jellyfish => self.alive_jellyfish(dt, w, top, bottom),
         }
     }
 
     /// A normal fish: wander, school, cruise and avoid the walls.
+    #[allow(clippy::too_many_arguments)]
     fn alive_fish(
         &mut self,
         dt: f32,
@@ -228,12 +241,19 @@ impl Fish {
         top: f32,
         bottom: f32,
         margin: f32,
+        food: Option<(f32, f32)>,
     ) {
         // Wander: deterministic pseudo-noise, so a fixed seed gives a fixed tank.
         let noise_x = (self.age * 0.8 + self.phase).sin();
         let noise_y = (self.age * 0.6 + self.phase * 1.7).cos();
         self.vel.0 += noise_x * 8.0 * dt;
         self.vel.1 += noise_y * 3.0 * dt;
+
+        // Chase the nearest pellet.
+        if let Some((fx, fy)) = food {
+            self.vel.0 += (fx - self.pos.0) * 6.0 * dt;
+            self.vel.1 += (fy - self.pos.1) * 6.0 * dt;
+        }
 
         // School gently with the parent, aiming a little behind it.
         if let Some((px, py)) = parent {
@@ -370,7 +390,7 @@ mod tests {
     fn crabs_stay_on_the_sand() {
         let mut c = creature(proc(1, "kworker").kernel_thread(), CreatureKind::Crab);
         for _ in 0..500 {
-            c.update(0.05, 80.0, 24.0, None);
+            c.update(0.05, 80.0, 24.0, None, None);
             assert_eq!(c.pos.1, 23.0, "crab should sit on the sand row");
             assert!((1.0..=78.0).contains(&c.pos.0));
         }
@@ -382,7 +402,7 @@ mod tests {
         let mut min = f32::MAX;
         let mut max = f32::MIN;
         for _ in 0..1000 {
-            j.update(0.03, 80.0, 24.0, None);
+            j.update(0.03, 80.0, 24.0, None, None);
             min = min.min(j.pos.1);
             max = max.max(j.pos.1);
         }
@@ -404,7 +424,7 @@ mod tests {
         assert_eq!(f.target_size, 3.0);
         assert_eq!(f.size, 0.0);
         for _ in 0..100 {
-            f.update(0.01, 80.0, 24.0, None);
+            f.update(0.01, 80.0, 24.0, None, None);
         }
         assert!(
             f.size > 2.5,
@@ -418,7 +438,7 @@ mod tests {
     fn fish_never_leaves_the_water() {
         let mut f = fish(0, 0.0);
         for _ in 0..5000 {
-            f.update(0.05, 80.0, 24.0, None);
+            f.update(0.05, 80.0, 24.0, None, None);
             assert!(
                 (0.5..=78.5).contains(&f.pos.0),
                 "x out of bounds: {}",
@@ -436,10 +456,10 @@ mod tests {
     fn facing_follows_horizontal_velocity() {
         let mut f = fish(0, 0.0);
         f.vel = (-10.0, 0.0);
-        f.update(0.1, 80.0, 24.0, None);
+        f.update(0.1, 80.0, 24.0, None, None);
         assert_eq!(f.facing, Facing::Left);
         f.vel = (10.0, 0.0);
-        f.update(0.1, 80.0, 24.0, None);
+        f.update(0.1, 80.0, 24.0, None, None);
         assert_eq!(f.facing, Facing::Right);
     }
 
@@ -450,7 +470,7 @@ mod tests {
         assert_eq!(f.state, FishState::Exiting);
         let start_y = f.pos.1;
         for _ in 0..200 {
-            f.update(0.05, 80.0, 24.0, None);
+            f.update(0.05, 80.0, 24.0, None, None);
         }
         assert!(f.pos.1 < start_y, "should rise towards the surface");
         assert!(f.finished(), "should eventually be removed");
@@ -461,7 +481,7 @@ mod tests {
         let mut f = fish(0, 0.0);
         f.begin_leaving(1.0);
         for _ in 0..500 {
-            f.update(0.05, 80.0, 24.0, None);
+            f.update(0.05, 80.0, 24.0, None, None);
         }
         assert!(f.finished());
         assert!(f.pos.0 > 78.0, "should have swum off to the right");

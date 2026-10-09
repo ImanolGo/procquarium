@@ -22,6 +22,8 @@ pub struct Config {
     pub ascii: bool,
     /// Any key exits, and no labels or info box are drawn.
     pub screensaver: bool,
+    /// Let `f` drop food, and feed the fish that eat it a priority nudge.
+    pub feed: bool,
     /// Fixed RNG seed, for reproducible tanks and tests.
     pub seed: Option<u64>,
     /// Print a snapshot and exit (hidden debugging flag).
@@ -39,6 +41,7 @@ impl Config {
         kernel: bool,
         ascii: bool,
         screensaver: bool,
+        feed: bool,
         seed: Option<u64>,
         dump: bool,
     ) -> Result<Self> {
@@ -61,6 +64,7 @@ impl Config {
             kernel,
             ascii,
             screensaver,
+            feed,
             seed,
             dump,
         })
@@ -71,40 +75,47 @@ impl Config {
 mod tests {
     use super::*;
 
-    fn base() -> Result<Config> {
-        Config::new(1.0, 60, None, None, false, false, false, None, false)
+    /// A valid config with everything off.
+    fn config() -> Config {
+        Config::new(1.0, 60, None, None, false, false, false, false, None, false).expect("valid")
     }
 
     #[test]
     fn defaults_are_sane() {
-        let c = base().expect("valid");
+        let c = config();
         assert_eq!(c.max_fish, 60);
         assert_eq!(c.interval, Duration::from_secs(1));
         assert!(c.filter.is_none());
+        assert!(!c.feed);
     }
 
     #[test]
     fn rejects_non_positive_interval() {
-        assert!(Config::new(0.0, 60, None, None, false, false, false, None, false).is_err());
-        assert!(Config::new(-1.0, 60, None, None, false, false, false, None, false).is_err());
+        let bad = |secs| {
+            Config::new(
+                secs, 60, None, None, false, false, false, false, None, false,
+            )
+            .is_err()
+        };
+        assert!(bad(0.0));
+        assert!(bad(-1.0));
     }
 
     #[test]
     fn rejects_bad_regex() {
-        assert!(
-            Config::new(
-                1.0,
-                60,
-                None,
-                Some("(".into()),
-                false,
-                false,
-                false,
-                None,
-                false
-            )
-            .is_err()
+        let err = Config::new(
+            1.0,
+            60,
+            None,
+            Some("(".into()),
+            false,
+            false,
+            false,
+            false,
+            None,
+            false,
         );
+        assert!(err.is_err());
     }
 
     #[test]
@@ -114,6 +125,7 @@ mod tests {
             60,
             None,
             Some("^fire.*".into()),
+            false,
             false,
             false,
             false,

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users};
 
-use super::{ProcInfo, ProcStatus, ProcessSource, Snapshot};
+use super::{PriorityBoost, ProcInfo, ProcStatus, ProcessSource, Snapshot};
 
 /// Live process source. A fresh `SysinfoSource` performs one refresh on
 /// construction; callers should wait at least
@@ -144,5 +144,28 @@ impl ProcessSource for SysinfoSource {
         // Summed per-core CPU over every process gives total load on the box.
         let load = (cpu_total / (self.ncpu * 100.0)).clamp(0.0, 1.0);
         Ok(Snapshot::new(procs).with_load(load))
+    }
+
+    /// Raise priority by lowering niceness, but never past -20. This normally
+    /// needs privileges, so an unprivileged user will see `Denied`.
+    #[cfg(unix)]
+    fn boost_priority(&mut self, pid: u32) -> PriorityBoost {
+        let nice = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid as libc::id_t) };
+        let nice = if (-20..=19).contains(&nice) { nice } else { 0 };
+        let target = (nice - 1).max(-20);
+        if target == nice {
+            return PriorityBoost::Applied;
+        }
+        let rc = unsafe { libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, target) };
+        if rc == 0 {
+            PriorityBoost::Applied
+        } else {
+            PriorityBoost::Denied
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn boost_priority(&mut self, _pid: u32) -> PriorityBoost {
+        PriorityBoost::Unsupported
     }
 }

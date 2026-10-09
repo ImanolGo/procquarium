@@ -18,6 +18,7 @@ const SAND: Color = Color::Rgb(86, 70, 46);
 const SAND_ROCK: Color = Color::Rgb(120, 100, 70);
 const SURFACE: Color = Color::Rgb(120, 190, 230);
 const BUBBLE: Color = Color::Rgb(150, 205, 235);
+const FOOD: Color = Color::Rgb(214, 184, 122);
 const SEAWEED: Color = Color::Rgb(46, 140, 90);
 const SELECT_BG: Color = Color::Rgb(40, 74, 116);
 const PANEL_BG: Color = Color::Rgb(10, 26, 48);
@@ -61,6 +62,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_sand(buf, area, ascii);
     draw_seaweed(buf, area, app, time);
     draw_bubbles(buf, area, app, ascii);
+    draw_food(buf, area, app, ascii);
 
     for egg in &app.tank.eggs {
         let wobble = (egg.phase).sin();
@@ -211,6 +213,20 @@ fn draw_bubbles(buf: &mut Buffer, area: Rect, app: &App, ascii: bool) {
     }
 }
 
+fn draw_food(buf: &mut Buffer, area: Rect, app: &App, ascii: bool) {
+    let ch = if ascii { '*' } else { '•' };
+    for pellet in &app.tank.food {
+        put(
+            buf,
+            area,
+            pellet.x.round() as i32,
+            pellet.y.round() as i32,
+            ch,
+            Style::default().fg(FOOD),
+        );
+    }
+}
+
 fn draw_fish(
     buf: &mut Buffer,
     area: Rect,
@@ -231,6 +247,9 @@ fn draw_fish(
     }
     if fish.state == FishState::Exiting && fish.death > 0.0 {
         style = style.add_modifier(Modifier::DIM);
+    }
+    if fish.fed > 0.0 {
+        style = style.add_modifier(Modifier::BOLD);
     }
     if selected {
         style = style.bg(SELECT_BG).add_modifier(Modifier::BOLD);
@@ -291,6 +310,11 @@ fn draw_info(buf: &mut Buffer, area: Rect, fish: &Fish) {
                 .set_style(Style::default().bg(PANEL_BG));
         }
     }
+    let status = if fish.fed > 0.0 {
+        format!("{} · fed", status_str(info.status))
+    } else {
+        status_str(info.status).to_string()
+    };
     draw_panel(
         buf,
         rect,
@@ -299,7 +323,7 @@ fn draw_info(buf: &mut Buffer, area: Rect, fish: &Fish) {
             (format!("pid {:<7} ppid {}", info.pid, parent), MUTED, false),
             (format!("cpu {:.1}%", info.cpu), MUTED, false),
             (format!("mem {}", human_bytes(info.memory)), MUTED, false),
-            (status_str(info.status).to_string(), MUTED, false),
+            (status, MUTED, false),
         ],
     );
 }
@@ -452,8 +476,19 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     fn test_app(width: u16, height: u16) -> App {
-        let config =
-            Config::new(1.0, 60, None, None, false, false, false, Some(7), false).expect("valid");
+        let config = Config::new(
+            1.0,
+            60,
+            None,
+            None,
+            false,
+            false,
+            false,
+            false,
+            Some(7),
+            false,
+        )
+        .expect("valid");
         let mut source = FakeSource::constant(vec![
             proc(1, "firefox")
                 .with_memory(2 * 1024 * 1024 * 1024)
