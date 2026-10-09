@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
+### Added
+
+- Click a fish to select it, and `--no-mouse` to keep text selection.
+- Highlight the selected fish's family and draw a dotted line to its parent.
+- A CPU sparkline in the details box.
+- Bubbles from processes doing disk I/O, in proportion to their throughput.
+- `/` to search for a process by name.
+- `--record` and `--replay` to save and replay snapshots as JSON lines.
+- Barnacles on long-running fish (`·` after a day, `:` after a week).
+- `--kill` and `k` to send SIGTERM to the selected process, with confirmation
+  and only for your own processes.
+
+### Fixed
+
+- Non-Unix builds: the errno helper no longer references the Unix-only `libc`
+  crate, which had broken the Windows binary build for 0.2.6.
+
 ## [0.2.6] - 2026-10-09
 
 ### Fixed
@@ -137,7 +156,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ImanolGo/procquarium/releases/tag/v0.3.0
 [0.2.6]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.4
