@@ -27,6 +27,7 @@ const SELECT_BG: Color = Color::Rgb(40, 74, 116);
 const PANEL_BG: Color = Color::Rgb(10, 26, 48);
 const PANEL_FG: Color = Color::Rgb(205, 224, 244);
 const MUTED: Color = Color::Rgb(140, 165, 190);
+const SPARK: Color = Color::Rgb(126, 200, 160);
 const ZOMBIE: Color = Color::DarkGray;
 
 /// Minimum terminal size we are willing to draw a tank in.
@@ -124,7 +125,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
             }
         }
         if let Some(fish) = app.selected_fish() {
-            draw_info(buf, area, fish);
+            let sparkline = app.cpu_sparkline(fish.identity());
+            draw_info(buf, area, fish, &sparkline);
         }
         if let Some(status) = &app.status {
             draw_centered(buf, area, status, Style::default().fg(PANEL_FG));
@@ -395,9 +397,9 @@ fn draw_label(buf: &mut Buffer, area: Rect, fish: &Fish, palette: &[Color]) {
     }
 }
 
-fn draw_info(buf: &mut Buffer, area: Rect, fish: &Fish) {
+fn draw_info(buf: &mut Buffer, area: Rect, fish: &Fish, sparkline: &str) {
     let width = 30.min(area.width.saturating_sub(2));
-    let height = 7;
+    let height = 8;
     if area.width < width + 2 || area.height < height + 2 {
         return;
     }
@@ -432,6 +434,7 @@ fn draw_info(buf: &mut Buffer, area: Rect, fish: &Fish) {
             (info.name.clone(), PANEL_FG, true),
             (format!("pid {:<7} ppid {}", info.pid, parent), MUTED, false),
             (format!("cpu {:.1}%", info.cpu), MUTED, false),
+            (sparkline.to_string(), SPARK, false),
             (format!("mem {}", human_bytes(info.memory)), MUTED, false),
             (status, MUTED, false),
         ],

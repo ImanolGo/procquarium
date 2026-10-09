@@ -1,7 +1,7 @@
 //! Application state: the tank plus everything the UI needs.
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::config::Config;
 use crate::diff;
@@ -32,7 +32,13 @@ pub struct App {
     /// How many consecutive samples each incumbent fish has been outranked, for
     /// the cut-off hysteresis.
     streaks: HashMap<(u32, u64), u8>,
+    /// Recent CPU samples per creature, for the details sparkline.
+    history: HashMap<(u32, u64), VecDeque<f32>>,
 }
+
+/// How many CPU samples to remember, and how many to draw.
+const SPARK_LEN: usize = 60;
+const SPARK_DISPLAY: usize = 24;
 
 impl App {
     pub fn new(config: Config, width: u16, height: u16, seed: u64) -> Self {
@@ -50,6 +56,7 @@ impl App {
             pending_boosts: Vec::new(),
             pending_restores: Vec::new(),
             streaks: HashMap::new(),
+            history: HashMap::new(),
         }
     }
 
@@ -80,6 +87,7 @@ impl App {
         }
 
         self.tank.apply(&events, &selected, first_sample);
+        self.record_cpu();
         self.load = snapshot.load;
         self.self_user = snapshot
             .procs
@@ -161,6 +169,40 @@ impl App {
     /// click lands on empty water.
     pub fn select_at(&mut self, column: u16, row: u16) {
         self.selected = crate::render::fish_at(self, column, row);
+    }
+
+    /// Remember each living creature's CPU for the details sparkline, and forget
+    /// the ones that have gone.
+    fn record_cpu(&mut self) {
+        let mut live = std::collections::HashSet::new();
+        for f in &self.tank.fish {
+            let id = f.identity();
+            let samples = self.history.entry(id).or_default();
+            samples.push_back(f.info.cpu);
+            while samples.len() > SPARK_LEN {
+                samples.pop_front();
+            }
+            live.insert(id);
+        }
+        self.history.retain(|id, _| live.contains(id));
+    }
+
+    /// A one-row sparkline of the recent CPU samples for a creature.
+    pub fn cpu_sparkline(&self, id: (u32, u64)) -> String {
+        const GLYPHS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+        let Some(history) = self.history.get(&id) else {
+            return String::new();
+        };
+        let start = history.len().saturating_sub(SPARK_DISPLAY);
+        history
+            .iter()
+            .skip(start)
+            .map(|cpu| {
+                let level =
+                    (cpu.clamp(0.0, 100.0) / 100.0 * (GLYPHS.len() - 1) as f32).round() as usize;
+                GLYPHS[level.min(GLYPHS.len() - 1)]
+            })
+            .collect()
     }
 
     pub fn adjust_max_fish(&mut self, delta: isize) {
@@ -327,6 +369,15 @@ mod tests {
 
     fn config_max(n: usize) -> Config {
         Config::builder().max_fish(n).build().expect("valid")
+    }
+
+    #[test]
+    fn cpu_sparkline_maps_history_to_glyphs() {
+        let mut app = App::new(config(), 80, 24, 1);
+        app.history
+            .insert((9, 1), [0.0, 50.0, 100.0].into_iter().collect());
+        assert_eq!(app.cpu_sparkline((9, 1)), "▁▅█");
+        assert_eq!(app.cpu_sparkline((404, 1)), "");
     }
 
     #[test]
