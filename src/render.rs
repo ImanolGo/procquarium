@@ -255,6 +255,9 @@ fn draw_fish(
     if fish.fed > 0.0 {
         style = style.add_modifier(Modifier::BOLD);
     }
+    if fish.appear > 0.0 {
+        style = style.add_modifier(Modifier::DIM);
+    }
     if selected {
         style = style.bg(SELECT_BG).add_modifier(Modifier::BOLD);
     }

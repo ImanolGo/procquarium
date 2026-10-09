@@ -4,6 +4,8 @@ use crate::source::{ProcInfo, ProcStatus};
 
 use super::mapping;
 
+/// How long the fade-in takes for a fish placed in open water.
+const APPEAR_TIME: f32 = 0.6;
 /// Time constant for easing size and speed towards their targets.
 const EASE_TAU: f32 = 0.35;
 /// How long a dead fish spends drifting to the surface before it starts to fade.
@@ -25,6 +27,8 @@ pub enum FishState {
     Exiting,
     /// Dropped out of the top N: swim off screen without dying.
     Leaving,
+    /// Promoted into the top N: swim in from a wall.
+    Entering,
 }
 
 /// What kind of creature a process turns into.
@@ -81,6 +85,9 @@ pub struct Fish {
     pub leave_dir: f32,
     /// Countdown once the fish has eaten something, for a little glow.
     pub fed: f32,
+    /// Fade-in progress for a fish placed in open water: 1.0 = just appeared,
+    /// 0.0 = fully visible.
+    pub appear: f32,
 }
 
 impl Fish {
@@ -121,6 +128,7 @@ impl Fish {
             death: 0.0,
             leave_dir: 0.0,
             fed: 0.0,
+            appear: 0.0,
         }
     }
 
@@ -137,7 +145,7 @@ impl Fish {
     }
 
     pub fn begin_exit(&mut self) {
-        if self.state == FishState::Alive {
+        if matches!(self.state, FishState::Alive | FishState::Entering) {
             self.state = FishState::Exiting;
             self.timer = 0.0;
             self.death = 0.0;
@@ -145,11 +153,18 @@ impl Fish {
     }
 
     pub fn begin_leaving(&mut self, dir: f32) {
-        if self.state == FishState::Alive {
+        if matches!(self.state, FishState::Alive | FishState::Entering) {
             self.state = FishState::Leaving;
             self.leave_dir = if dir >= 0.0 { 1.0 } else { -1.0 };
             self.timer = 0.0;
         }
+    }
+
+    /// Start swimming in from the given side (`dir` is the direction of travel).
+    pub fn begin_entering(&mut self, dir: f32) {
+        self.state = FishState::Entering;
+        self.leave_dir = if dir >= 0.0 { 1.0 } else { -1.0 };
+        self.timer = 0.0;
     }
 
     /// True once the fish should be removed from the tank.
@@ -179,6 +194,7 @@ impl Fish {
     ) {
         self.age += dt;
         self.fed = (self.fed - dt).max(0.0);
+        self.appear = (self.appear - dt / APPEAR_TIME).max(0.0);
         let top = 1.0_f32;
         let bottom = (h - 2.0).max(top);
         let margin = 3.0_f32.min(w * 0.25).max(1.0);
@@ -223,6 +239,26 @@ impl Fish {
                     || self.timer > 15.0
                 {
                     self.death = 1.0;
+                }
+                return;
+            }
+            FishState::Entering => {
+                self.timer += dt;
+                let accel = 1.0 - (-dt / 0.4).exp();
+                let target = self.leave_dir * (self.speed + 8.0);
+                self.vel.0 += (target - self.vel.0) * accel;
+                self.vel.1 += (0.0 - self.vel.1) * accel;
+                self.pos.0 += self.vel.0 * dt;
+                self.pos.1 += self.vel.1 * dt;
+                self.pos.1 = self.pos.1.clamp(top, bottom);
+                self.facing = if self.vel.0 >= 0.0 {
+                    Facing::Right
+                } else {
+                    Facing::Left
+                };
+                if (1.0..=w - 2.0).contains(&self.pos.0) {
+                    self.state = FishState::Alive;
+                    self.timer = 0.0;
                 }
                 return;
             }

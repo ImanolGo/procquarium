@@ -58,6 +58,7 @@ impl App {
 
     /// Feed a fresh snapshot: diff it, pick the top processes, and update the tank.
     pub fn apply_snapshot(&mut self, snapshot: Snapshot) {
+        let first_sample = !self.ready;
         let events = diff::diff(&self.prev, &snapshot);
 
         // Rank, then apply cut-off hysteresis so processes near the boundary
@@ -81,7 +82,7 @@ impl App {
             );
         }
 
-        self.tank.apply(&events, &selected);
+        self.tank.apply(&events, &selected, first_sample);
         self.load = snapshot.load;
         self.self_user = snapshot
             .procs
@@ -461,7 +462,7 @@ mod tests {
         let mut app = App::new(config(), 80, 24, 1);
         let shell = proc(1, "shell");
         app.tank
-            .apply(&[ProcEvent::Spawned(shell.clone())], &[shell]);
+            .apply(&[ProcEvent::Spawned(shell.clone())], &[shell], false);
         for _ in 0..150 {
             app.update(0.01);
         }
