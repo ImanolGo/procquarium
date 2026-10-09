@@ -14,6 +14,8 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 
 > **Status:** 0.3 — usable and still growing. The plan lives in [PLAN.md](PLAN.md); see [DEVELOPMENT.md](DEVELOPMENT.md) for how it is built.
 
+> **Library:** The library exists for docs and tests; it has no stability guarantee. The product is the `procquarium` binary.
+
 ## What the fish mean
 
 | In the tank | On your machine |
