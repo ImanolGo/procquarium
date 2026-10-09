@@ -1,4 +1,4 @@
-//! Application state: the tank plus the previous snapshot used for diffing.
+//! Application state: the tank plus everything the UI needs.
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -8,13 +8,19 @@ use crate::diff;
 use crate::source::{ProcInfo, Snapshot};
 use crate::tank::Tank;
 
+/// Top-level state. The tank is pure simulation; the rest is UI state and the
+/// previous snapshot used for diffing.
 pub struct App {
     pub tank: Tank,
     pub config: Config,
-    /// False until the first (CPU-meaningful) sample has arrived.
+    pub paused: bool,
+    pub show_labels: bool,
+    pub selected: Option<u32>,
+    /// False until the second (CPU-meaningful) sample has arrived.
     pub ready: bool,
     pub status: Option<String>,
     prev: Snapshot,
+    pub tick: f32,
 }
 
 impl App {
@@ -23,13 +29,17 @@ impl App {
         Self {
             tank: Tank::new(width, height, max_fish, seed),
             config,
+            paused: false,
+            show_labels: false,
+            selected: None,
             ready: false,
             status: Some("filling the tank…".to_string()),
             prev: Snapshot::default(),
+            tick: 0.0,
         }
     }
 
-    /// Feed a fresh snapshot: diff it, pick the top processes, update the tank.
+    /// Feed a fresh snapshot: diff it, pick the top processes, and update the tank.
     pub fn apply_snapshot(&mut self, snapshot: Snapshot) {
         let events = diff::diff(&self.prev, &snapshot);
         let selected: HashSet<u32> = select_pids(&snapshot, &self.config).into_iter().collect();
@@ -37,10 +47,48 @@ impl App {
         self.prev = snapshot;
         self.ready = true;
         self.status = None;
+
+        if let Some(pid) = self.selected
+            && !self.tank.contains(pid)
+        {
+            self.selected = None;
+        }
     }
 
     pub fn update(&mut self, dt: f32) {
-        self.tank.update(dt);
+        self.tick += dt;
+        if !self.paused {
+            self.tank.update(dt);
+        }
+    }
+
+    /// Move the selection forward or backward through the current fish.
+    pub fn select_next(&mut self, backwards: bool) {
+        let pids = self.tank.fish_pids();
+        if pids.is_empty() {
+            self.selected = None;
+            return;
+        }
+        let current = self
+            .selected
+            .and_then(|p| pids.iter().position(|x| *x == p));
+        let next = match current {
+            Some(i) if backwards => (i + pids.len() - 1) % pids.len(),
+            Some(i) => (i + 1) % pids.len(),
+            None if backwards => pids.len() - 1,
+            None => 0,
+        };
+        self.selected = Some(pids[next]);
+    }
+
+    pub fn adjust_max_fish(&mut self, delta: isize) {
+        let new = (self.config.max_fish as isize + delta).max(1) as usize;
+        self.config.max_fish = new;
+        self.tank.max_fish = new;
+    }
+
+    pub fn selected_fish(&self) -> Option<&crate::tank::fish::Fish> {
+        self.selected.and_then(|pid| self.tank.fish(pid))
     }
 }
 
@@ -76,7 +124,7 @@ mod tests {
     use crate::source::fake::{proc, snapshot};
 
     fn config() -> Config {
-        Config::new(1.0, 60, None, None, false, false, None).expect("valid")
+        Config::new(1.0, 60, None, None, false, false, false, None, false).expect("valid")
     }
 
     #[test]
@@ -85,11 +133,13 @@ mod tests {
             proc(1, "normal").with_memory(1024),
             proc(2, "kworker").with_memory(99999999).kernel_thread(),
         ]);
-        assert_eq!(select_pids(&snap, &config()), vec![1]);
+        let default = select_pids(&snap, &config());
+        assert_eq!(default, vec![1]);
 
         let mut with_kernel = config();
         with_kernel.kernel = true;
-        assert_eq!(select_pids(&snap, &with_kernel).len(), 2);
+        let both = select_pids(&snap, &with_kernel);
+        assert_eq!(both.len(), 2);
     }
 
     #[test]
@@ -129,7 +179,8 @@ mod tests {
     #[test]
     fn ranking_is_deterministic_on_ties() {
         let snap = snapshot(vec![proc(5, "a"), proc(3, "b"), proc(9, "c")]);
-        assert_eq!(select_pids(&snap, &config()), vec![3, 5, 9]);
+        let picked = select_pids(&snap, &config());
+        assert_eq!(picked, vec![3, 5, 9], "ties break on ascending pid");
     }
 
     #[test]

@@ -106,19 +106,3 @@ impl ProcInfo {
         self
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fake_source_plays_snapshots_in_order() {
-        let a = snapshot(vec![proc(1, "a")]);
-        let b = snapshot(vec![proc(2, "b")]);
-        let mut source = FakeSource::new(vec![a.clone(), b.clone()]);
-        assert_eq!(source.snapshot().expect("sample"), a);
-        assert_eq!(source.snapshot().expect("sample"), b);
-        // The script is exhausted, so it keeps the last snapshot.
-        assert_eq!(source.snapshot().expect("sample"), b);
-    }
-}

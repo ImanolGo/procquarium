@@ -9,6 +9,7 @@ mod tank;
 
 use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use rand::Rng;
@@ -19,27 +20,79 @@ use crate::render::human_bytes;
 use crate::source::sysinfo_source::SysinfoSource;
 use crate::source::{ProcStatus, ProcessSource, Snapshot};
 
+const EXAMPLES: &str = "\
+Examples:
+  procquarium                 open the tank
+  procquarium --screensaver   any key or mouse event exits
+  procquarium --user $USER    only your own processes
+  procquarium --max-fish 120  a crowded tank";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "procquarium",
     version,
-    about = "Your running processes, as fish."
+    about = "Your running processes, as fish.",
+    long_about = "A terminal aquarium where every fish is a process on your machine. \
+Big fish use a lot of memory, fast fish are burning CPU, and when a process exits \
+its fish quietly floats to the surface. Leave it running in a spare pane, or use \
+it as a screensaver.",
+    after_help = EXAMPLES
 )]
 struct Cli {
-    /// Print one snapshot as a table and exit.
-    #[arg(long, hide = true)]
-    dump: bool,
+    /// Seconds between process samples.
+    #[arg(long, value_name = "SECS", default_value_t = 1.0)]
+    interval: f64,
+
+    /// Maximum number of fish in the tank.
+    #[arg(long, value_name = "N", default_value_t = 60)]
+    max_fish: usize,
+
+    /// Only show processes owned by this user.
+    #[arg(long, value_name = "USER")]
+    user: Option<String>,
+
+    /// Only show processes whose name matches this regex.
+    #[arg(long, value_name = "REGEX")]
+    filter: Option<String>,
+
+    /// Include kernel threads.
+    #[arg(long)]
+    kernel: bool,
+
+    /// Use plain ASCII glyphs instead of the Unicode ones.
+    #[arg(long)]
+    ascii: bool,
+
+    /// Exit on any key or mouse event; hide labels and the info box.
+    #[arg(long)]
+    screensaver: bool,
 
     /// Fixed random seed, for a reproducible tank.
     #[arg(long, value_name = "N")]
     seed: Option<u64>,
+
+    /// Print one snapshot as a table and exit.
+    #[arg(long, hide = true)]
+    dump: bool,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
+    let config = Config::new(
+        cli.interval,
+        cli.max_fish,
+        cli.user,
+        cli.filter,
+        cli.kernel,
+        cli.ascii,
+        cli.screensaver,
+        cli.seed,
+        cli.dump,
+    )?;
+
     let mut source = SysinfoSource::new();
 
-    if cli.dump {
+    if config.dump {
         // Give the CPU counters a moment to become meaningful.
         std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
         let snapshot = source.snapshot()?;
@@ -47,9 +100,7 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let config = Config::new(1.0, 60, None, None, false, false, cli.seed)?;
     let seed = config.seed.unwrap_or_else(|| rand::rng().random());
-
     let mut terminal = ratatui::init();
     let result = run(&mut terminal, source, config, seed);
     ratatui::restore();
@@ -61,29 +112,43 @@ fn run(
     mut source: SysinfoSource,
     config: Config,
     seed: u64,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let size = terminal.size()?;
     let mut app = App::new(config, size.width, size.height, seed);
     let interval = app.config.interval;
+    let screensaver = app.config.screensaver;
     let frame_target = Duration::from_millis(33);
-    let mut last_sample = Instant::now();
+
     let mut last_frame = Instant::now();
+    let mut last_sample = Instant::now();
 
     loop {
         // Sample the process table on its own timer.
         if last_sample.elapsed() >= interval {
-            app.apply_snapshot(source.snapshot()?);
+            let started = Instant::now();
+            match source.snapshot() {
+                Ok(snapshot) => app.apply_snapshot(snapshot),
+                Err(error) => app.status = Some(format!("sample error: {error}")),
+            }
             last_sample = Instant::now();
+            let took = started.elapsed();
+            if took > Duration::from_millis(50) {
+                // Recorded rather than logged: a slow sample is worth watching
+                // but must not interrupt the picture.
+                app.status = Some(format!("slow sample: {} ms", took.as_millis()));
+            }
         }
 
         // Drain input, waiting at most until the next frame is due.
+        let timeout = frame_target.saturating_sub(last_frame.elapsed());
         loop {
-            if !event::poll(frame_target)? {
+            if !event::poll(timeout)? {
                 break;
             }
-            if should_quit(&event::read()?) {
+            if handle_event(&mut app, event::read()?, screensaver) {
                 return Ok(());
             }
+            // After the first event, don't wait for more.
             if !event::poll(Duration::ZERO)? {
                 break;
             }
@@ -98,12 +163,32 @@ fn run(
     }
 }
 
-fn should_quit(event: &Event) -> bool {
-    if let Event::Key(key) = event
-        && key.kind == KeyEventKind::Press
-    {
-        return matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL));
+/// Returns true when the app should quit.
+fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
+    match event {
+        Event::Key(key) => {
+            if key.kind != KeyEventKind::Press {
+                return false;
+            }
+            if screensaver {
+                return true;
+            }
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => return true,
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return true;
+                }
+                KeyCode::Char(' ') => app.paused = !app.paused,
+                KeyCode::Char('l') => app.show_labels = !app.show_labels,
+                KeyCode::Tab => app.select_next(key.modifiers.contains(KeyModifiers::SHIFT)),
+                KeyCode::BackTab => app.select_next(true),
+                KeyCode::Char('+') | KeyCode::Char('=') => app.adjust_max_fish(10),
+                KeyCode::Char('-') | KeyCode::Char('_') => app.adjust_max_fish(-10),
+                _ => {}
+            }
+        }
+        Event::Mouse(_) if screensaver => return true,
+        _ => {}
     }
     false
 }

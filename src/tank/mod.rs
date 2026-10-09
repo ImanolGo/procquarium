@@ -37,12 +37,15 @@ pub struct Tank {
     pub decor: Decor,
     pub width: u16,
     pub height: u16,
+    pub max_fish: usize,
     pub time: f32,
+    /// Count of fish hatched this run, for the status line.
+    pub hatched: u64,
     rng: ChaCha8Rng,
 }
 
 impl Tank {
-    pub fn new(width: u16, height: u16, _max_fish: usize, seed: u64) -> Self {
+    pub fn new(width: u16, height: u16, max_fish: usize, seed: u64) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut decor = Decor::new();
         decor.configure(width, height, &mut rng);
@@ -52,7 +55,9 @@ impl Tank {
             decor,
             width,
             height,
+            max_fish,
             time: 0.0,
+            hatched: 0,
             rng,
         }
     }
@@ -141,6 +146,7 @@ impl Tank {
             let mut f = Fish::new(info, (x, h - 2.0), phase, facing);
             f.vel.1 = -2.5;
             self.fish.push(f);
+            self.hatched += 1;
         }
 
         // Snapshot parent positions before mutating the fish.
@@ -159,6 +165,15 @@ impl Tank {
 
         self.decor
             .update(dt, self.width, self.height, &mut self.rng, &self.fish);
+    }
+
+    /// Fish pids in a stable order (as they appear in the tank), for cycling.
+    pub fn fish_pids(&self) -> Vec<u32> {
+        self.fish.iter().map(|f| f.pid).collect()
+    }
+
+    pub fn fish(&self, pid: u32) -> Option<&Fish> {
+        self.fish.iter().find(|f| f.pid == pid)
     }
 }
 
@@ -180,11 +195,13 @@ mod tests {
         assert_eq!(tank.eggs.len(), 1);
         assert!(tank.fish.is_empty());
 
+        // Half a second: still an egg.
         for _ in 0..50 {
             tank.update(0.01);
         }
-        assert!(tank.fish.is_empty(), "still an egg");
+        assert!(tank.fish.is_empty());
 
+        // Another second: hatched.
         for _ in 0..100 {
             tank.update(0.01);
         }
@@ -234,6 +251,18 @@ mod tests {
         tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &selected(&[]));
         assert!(tank.eggs.is_empty());
         assert!(tank.fish.is_empty());
+    }
+
+    #[test]
+    fn degenerate_terminal_sizes_do_not_panic() {
+        // Some terminals briefly report zero columns at startup.
+        for (w, h) in [(0, 0), (1, 1), (2, 3), (4, 4)] {
+            let mut tank = Tank::new(w, h, 60, 1);
+            tank.apply(&[ProcEvent::Spawned(proc(1, "shell"))], &selected(&[1]));
+            for _ in 0..200 {
+                tank.update(0.05);
+            }
+        }
     }
 
     #[test]

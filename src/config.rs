@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use regex::Regex;
 
-/// Everything the simulation needs to know about how the user wants to run.
+/// Everything the simulation and UI need to know about how the user wants to run.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// How often to take a process snapshot.
@@ -20,12 +20,17 @@ pub struct Config {
     pub kernel: bool,
     /// Use plain ASCII glyphs instead of the nicer Unicode ones.
     pub ascii: bool,
+    /// Any key exits, and no labels or info box are drawn.
+    pub screensaver: bool,
     /// Fixed RNG seed, for reproducible tanks and tests.
     pub seed: Option<u64>,
+    /// Print a snapshot and exit (hidden debugging flag).
+    pub dump: bool,
 }
 
 impl Config {
     /// Build a config, validating the raw filter regex and interval.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         interval_secs: f64,
         max_fish: usize,
@@ -33,7 +38,9 @@ impl Config {
         filter: Option<String>,
         kernel: bool,
         ascii: bool,
+        screensaver: bool,
         seed: Option<u64>,
+        dump: bool,
     ) -> Result<Self> {
         if !interval_secs.is_finite() || interval_secs <= 0.0 {
             bail!("--interval must be a positive number of seconds");
@@ -53,7 +60,9 @@ impl Config {
             filter,
             kernel,
             ascii,
+            screensaver,
             seed,
+            dump,
         })
     }
 }
@@ -63,7 +72,7 @@ mod tests {
     use super::*;
 
     fn base() -> Result<Config> {
-        Config::new(1.0, 60, None, None, false, false, None)
+        Config::new(1.0, 60, None, None, false, false, false, None, false)
     }
 
     #[test]
@@ -76,19 +85,42 @@ mod tests {
 
     #[test]
     fn rejects_non_positive_interval() {
-        assert!(Config::new(0.0, 60, None, None, false, false, None).is_err());
-        assert!(Config::new(-1.0, 60, None, None, false, false, None).is_err());
+        assert!(Config::new(0.0, 60, None, None, false, false, false, None, false).is_err());
+        assert!(Config::new(-1.0, 60, None, None, false, false, false, None, false).is_err());
     }
 
     #[test]
     fn rejects_bad_regex() {
-        assert!(Config::new(1.0, 60, None, Some("(".into()), false, false, None).is_err());
+        assert!(
+            Config::new(
+                1.0,
+                60,
+                None,
+                Some("(".into()),
+                false,
+                false,
+                false,
+                None,
+                false
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn compiles_filter() {
-        let c =
-            Config::new(1.0, 60, None, Some("^fire.*".into()), false, false, None).expect("valid");
+        let c = Config::new(
+            1.0,
+            60,
+            None,
+            Some("^fire.*".into()),
+            false,
+            false,
+            false,
+            None,
+            false,
+        )
+        .expect("valid");
         assert!(c.filter.unwrap().is_match("firefox"));
     }
 }
