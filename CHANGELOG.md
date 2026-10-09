@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-09
+
+### Changed
+
+- The README status line now reflects 0.4 and the 1.0 stability promise.
+
 ## [0.4.0] - 2026-10-09
 
 ### Added
