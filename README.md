@@ -180,6 +180,8 @@ Once a second procquarium takes a snapshot of the process table with [`sysinfo`]
 
 For demos and bug reports, `--record` writes every snapshot to a file as a line of JSON and `--replay` plays one back through the same pipeline. The file opens with a version line (`{"procquarium_recording": 1}`), and `--replay` refuses a recording from a newer format rather than guessing, so recordings stay replayable across 1.x releases.
 
+On Unix, procquarium catches `SIGHUP`, `SIGTERM` and `SIGINT` and turns them into a normal shutdown, so any priority changes from `--feed` are undone and the terminal is restored cleanly — including when you simply close the terminal window. `SIGKILL` cannot be caught, so `kill -9` can leave a fed process boosted.
+
 procquarium tries hard to be a polite guest. It should stay under a couple of percent of one core, and yes, it shows up in its own tank.
 
 ## Contributing

@@ -2,6 +2,8 @@
 //!
 //! This is the binary crate; the reusable pieces live in the library.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -185,7 +187,14 @@ fn main() -> Result<()> {
         }));
     }
 
-    let result = run(&mut terminal, config, seed);
+    // A signal turns into a normal shutdown, so the sampler's Drop runs and any
+    // boosted priorities are restored (SIGKILL cannot be caught). Only Unix
+    // signals are meaningful here.
+    let shutdown = Arc::new(AtomicBool::new(false));
+    #[cfg(unix)]
+    install_signal_handlers(&shutdown)?;
+
+    let result = run(&mut terminal, config, seed, &shutdown);
 
     if mouse {
         let _ = execute!(std::io::stdout(), DisableMouseCapture);
@@ -194,7 +203,25 @@ fn main() -> Result<()> {
     result
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Result<()> {
+/// Ask for a clean shutdown on SIGHUP (terminal closed), SIGTERM and SIGINT.
+/// The handlers only set a flag, which the render loop checks each frame.
+#[cfg(unix)]
+fn install_signal_handlers(shutdown: &Arc<AtomicBool>) -> Result<()> {
+    use anyhow::Context;
+    use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+    for signal in [SIGHUP, SIGINT, SIGTERM] {
+        signal_hook::flag::register(signal, Arc::clone(shutdown))
+            .with_context(|| format!("installing a handler for signal {signal}"))?;
+    }
+    Ok(())
+}
+
+fn run(
+    terminal: &mut ratatui::DefaultTerminal,
+    config: Config,
+    seed: u64,
+    shutdown: &AtomicBool,
+) -> Result<()> {
     let interval = config.interval;
     let recorder = match &config.record {
         Some(path) => Some(record::Recorder::create(path)?),
@@ -220,6 +247,12 @@ fn run(terminal: &mut ratatui::DefaultTerminal, config: Config, seed: u64) -> Re
     let mut renice_denied = false;
 
     loop {
+        // A signal asked us to stop: return normally so Drop restores priorities
+        // and the terminal.
+        if shutdown.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
         // Take whatever the sampling thread has produced since last frame.
         while let Some(ev) = sampler.try_recv() {
             match ev {

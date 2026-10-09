@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `SIGHUP`, `SIGTERM` and `SIGINT` now trigger a normal shutdown, so closing
+  the terminal (or `kill`) restores any priorities changed by `--feed` and
+  restores the terminal. `SIGKILL` still cannot be handled.
 - `--kill` can no longer signal the wrong process. The confirmation carries the
   process's start time as well as its pid, the process is refreshed just before
   the signal and refused if the pid has been reused, the prompt closes itself
