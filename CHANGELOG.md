@@ -12,6 +12,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   table, and top-level keys (`interval`, `max_fish`, `user`, `filter`, `kernel`,
   `ascii`, `feed`) set defaults that command-line flags override. The old
   flat theme layout is no longer accepted.
+- Recordings are now versioned. The first line is
+  `{"procquarium_recording": 1}`, snapshots use a dedicated stable record type
+  rather than the internal `ProcInfo`, and `--replay` rejects an unknown version
+  with a clear message. Recordings made before this change no longer replay.
 
 ## [0.3.2] - 2026-10-09
 

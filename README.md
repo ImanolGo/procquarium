@@ -178,7 +178,7 @@ Linux and macOS are the main targets. Windows should work, but zombie fish won't
 
 Once a second procquarium takes a snapshot of the process table with [`sysinfo`](https://crates.io/crates/sysinfo), compares it with the previous one, and turns the differences into events: births, deaths, things getting hungrier. The tank itself runs at around 30 frames per second and draws with [`ratatui`](https://ratatui.rs). Sampling (and any renice or signal work) happens on a background thread, so a slow sample never stutters a frame. Fish ease towards their new size and speed rather than jumping, so the picture stays calm even when your machine isn't.
 
-For demos and bug reports, `--record` writes every snapshot to a file as a line of JSON and `--replay` plays one back through the same pipeline.
+For demos and bug reports, `--record` writes every snapshot to a file as a line of JSON and `--replay` plays one back through the same pipeline. The file opens with a version line (`{"procquarium_recording": 1}`), and `--replay` refuses a recording from a newer format rather than guessing, so recordings stay replayable across 1.x releases.
 
 procquarium tries hard to be a polite guest. It should stay under a couple of percent of one core, and yes, it shows up in its own tank.
 

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 /// Coarse process state, mapped from the platform's finer-grained view.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcStatus {
     Running,
     Sleeping,
@@ -14,7 +14,7 @@ pub enum ProcStatus {
 }
 
 /// A single process as seen at one sampling instant.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProcInfo {
     pub pid: u32,
     pub parent: Option<u32>,
