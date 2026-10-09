@@ -38,6 +38,10 @@ impl App {
         self.ready = true;
         self.status = None;
     }
+
+    pub fn update(&mut self, dt: f32) {
+        self.tank.update(dt);
+    }
 }
 
 /// Choose which processes deserve a fish: apply the filters, rank by score,
@@ -72,7 +76,7 @@ mod tests {
     use crate::source::fake::{proc, snapshot};
 
     fn config() -> Config {
-        Config::new(1.0, 60, None, None, false, false).expect("valid")
+        Config::new(1.0, 60, None, None, false, false, None).expect("valid")
     }
 
     #[test]

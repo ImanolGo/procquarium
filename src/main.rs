@@ -29,6 +29,10 @@ struct Cli {
     /// Print one snapshot as a table and exit.
     #[arg(long, hide = true)]
     dump: bool,
+
+    /// Fixed random seed, for a reproducible tank.
+    #[arg(long, value_name = "N")]
+    seed: Option<u64>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -43,8 +47,8 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let config = Config::new(1.0, 60, None, None, false, false)?;
-    let seed = rand::rng().random();
+    let config = Config::new(1.0, 60, None, None, false, false, cli.seed)?;
+    let seed = config.seed.unwrap_or_else(|| rand::rng().random());
 
     let mut terminal = ratatui::init();
     let result = run(&mut terminal, source, config, seed);
@@ -63,6 +67,7 @@ fn run(
     let interval = app.config.interval;
     let frame_target = Duration::from_millis(33);
     let mut last_sample = Instant::now();
+    let mut last_frame = Instant::now();
 
     loop {
         // Sample the process table on its own timer.
@@ -83,6 +88,11 @@ fn run(
                 break;
             }
         }
+
+        let now = Instant::now();
+        let dt = now.duration_since(last_frame).as_secs_f32().min(0.1);
+        last_frame = now;
+        app.update(dt);
 
         terminal.draw(|frame| render::draw(frame, &app))?;
     }

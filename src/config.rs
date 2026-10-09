@@ -20,6 +20,8 @@ pub struct Config {
     pub kernel: bool,
     /// Use plain ASCII glyphs instead of the nicer Unicode ones.
     pub ascii: bool,
+    /// Fixed RNG seed, for reproducible tanks and tests.
+    pub seed: Option<u64>,
 }
 
 impl Config {
@@ -31,6 +33,7 @@ impl Config {
         filter: Option<String>,
         kernel: bool,
         ascii: bool,
+        seed: Option<u64>,
     ) -> Result<Self> {
         if !interval_secs.is_finite() || interval_secs <= 0.0 {
             bail!("--interval must be a positive number of seconds");
@@ -50,6 +53,7 @@ impl Config {
             filter,
             kernel,
             ascii,
+            seed,
         })
     }
 }
@@ -59,7 +63,7 @@ mod tests {
     use super::*;
 
     fn base() -> Result<Config> {
-        Config::new(1.0, 60, None, None, false, false)
+        Config::new(1.0, 60, None, None, false, false, None)
     }
 
     #[test]
@@ -72,18 +76,19 @@ mod tests {
 
     #[test]
     fn rejects_non_positive_interval() {
-        assert!(Config::new(0.0, 60, None, None, false, false).is_err());
-        assert!(Config::new(-1.0, 60, None, None, false, false).is_err());
+        assert!(Config::new(0.0, 60, None, None, false, false, None).is_err());
+        assert!(Config::new(-1.0, 60, None, None, false, false, None).is_err());
     }
 
     #[test]
     fn rejects_bad_regex() {
-        assert!(Config::new(1.0, 60, None, Some("(".into()), false, false).is_err());
+        assert!(Config::new(1.0, 60, None, Some("(".into()), false, false, None).is_err());
     }
 
     #[test]
     fn compiles_filter() {
-        let c = Config::new(1.0, 60, None, Some("^fire.*".into()), false, false).expect("valid");
+        let c =
+            Config::new(1.0, 60, None, Some("^fire.*".into()), false, false, None).expect("valid");
         assert!(c.filter.unwrap().is_match("firefox"));
     }
 }

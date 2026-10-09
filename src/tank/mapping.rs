@@ -21,6 +21,14 @@ pub fn size_class(memory: u64) -> u8 {
     }
 }
 
+/// Target cruising speed in cells per second from CPU usage.
+///
+/// Idle processes still drift slowly at 2 cells/s; a process pegged at one core
+/// reaches 20 cells/s.
+pub fn target_speed(cpu: f32) -> f32 {
+    2.0 + 18.0 * (cpu / 100.0).clamp(0.0, 1.0).sqrt()
+}
+
 /// A palette of twelve colours chosen to read well on the dark blue water (and
 /// reasonably on a light terminal, since the water background is always ours).
 pub const PALETTE: [Color; 12] = [
@@ -67,6 +75,18 @@ mod tests {
         assert_eq!(size_class(1023 * MIB), 2);
         assert_eq!(size_class(1024 * MIB), 3);
         assert_eq!(size_class(64 * 1024 * MIB), 3);
+    }
+
+    #[test]
+    fn speed_is_bounded_and_monotonic() {
+        assert_eq!(target_speed(0.0), 2.0);
+        assert!((target_speed(100.0) - 20.0).abs() < 1e-6);
+        assert!(
+            (target_speed(400.0) - 20.0).abs() < 1e-6,
+            "clamped at one core"
+        );
+        assert!(target_speed(25.0) < target_speed(64.0));
+        assert!(target_speed(64.0) < target_speed(100.0));
     }
 
     #[test]
