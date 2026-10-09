@@ -23,7 +23,6 @@ pub struct App {
     /// day/night cycle.
     pub load: f32,
     prev: Snapshot,
-    pub tick: f32,
     /// Username of our own process, so we never feed another user's processes.
     self_user: Option<String>,
     /// Pids that ate since the last drain and are due a priority nudge.
@@ -37,9 +36,8 @@ pub struct App {
 
 impl App {
     pub fn new(config: Config, width: u16, height: u16, seed: u64) -> Self {
-        let max_fish = config.max_fish;
         Self {
-            tank: Tank::new(width, height, max_fish, seed),
+            tank: Tank::new(width, height, seed),
             config,
             paused: false,
             show_labels: true,
@@ -48,7 +46,6 @@ impl App {
             status: Some("filling the tank…".to_string()),
             load: 0.0,
             prev: Snapshot::default(),
-            tick: 0.0,
             self_user: None,
             pending_boosts: Vec::new(),
             pending_restores: Vec::new(),
@@ -100,7 +97,6 @@ impl App {
     }
 
     pub fn update(&mut self, dt: f32) {
-        self.tick += dt;
         if !self.paused {
             self.tank.update(dt);
         }
@@ -164,7 +160,6 @@ impl App {
     pub fn adjust_max_fish(&mut self, delta: isize) {
         let new = (self.config.max_fish as isize + delta).max(1) as usize;
         self.config.max_fish = new;
-        self.tank.max_fish = new;
     }
 
     pub fn selected_fish(&self) -> Option<&crate::tank::fish::Fish> {
@@ -321,11 +316,11 @@ mod tests {
     use crate::source::fake::{proc, snapshot};
 
     fn config() -> Config {
-        Config::new(1.0, 60, None, None, false, false, false, false, None, false).expect("valid")
+        Config::builder().build().expect("valid")
     }
 
     fn config_max(n: usize) -> Config {
-        Config::new(1.0, n, None, None, false, false, false, false, None, false).expect("valid")
+        Config::builder().max_fish(n).build().expect("valid")
     }
 
     #[test]

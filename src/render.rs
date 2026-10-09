@@ -33,9 +33,10 @@ const MIN_HEIGHT: u16 = 8;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let area = frame.area();
+    let mono = app.config.mono;
 
     if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-        draw_too_small(frame, area);
+        draw_too_small(frame, area, mono);
         return;
     }
 
@@ -121,9 +122,23 @@ pub fn draw(frame: &mut Frame, app: &App) {
             );
         }
     }
+
+    // NO_COLOR: keep the glyphs but drop every colour and attribute.
+    if mono {
+        for y in area.y..area.bottom() {
+            for x in area.x..area.right() {
+                buf[(x, y)].set_style(Style::default());
+            }
+        }
+    }
 }
 
-fn draw_too_small(frame: &mut Frame, area: Rect) {
+/// A colour, or the terminal default when `NO_COLOR` is set.
+fn paint(mono: bool, color: Color) -> Color {
+    if mono { Color::Reset } else { color }
+}
+
+fn draw_too_small(frame: &mut Frame, area: Rect, mono: bool) {
     let height = 3.min(area.height);
     let y = area.y + area.height.saturating_sub(height) / 2;
     let rect = Rect::new(area.x, y, area.width, height);
@@ -131,9 +146,14 @@ fn draw_too_small(frame: &mut Frame, area: Rect) {
         Paragraph::new(vec![
             Line::from(Span::styled(
                 "procquarium",
-                Style::default().fg(PANEL_FG).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(paint(mono, PANEL_FG))
+                    .add_modifier(Modifier::BOLD),
             )),
-            Line::from(Span::styled("make me bigger", Style::default().fg(MUTED))),
+            Line::from(Span::styled(
+                "make me bigger",
+                Style::default().fg(paint(mono, MUTED)),
+            )),
         ])
         .alignment(Alignment::Center),
         rect,
@@ -487,19 +507,11 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     fn test_app(width: u16, height: u16) -> App {
-        let config = Config::new(
-            1.0,
-            60,
-            None,
-            None,
-            false,
-            false,
-            false,
-            false,
-            Some(7),
-            false,
-        )
-        .expect("valid");
+        let config = Config::builder()
+            .max_fish(60)
+            .seed(Some(7))
+            .build()
+            .expect("valid");
         let mut source = FakeSource::constant(vec![
             proc(1, "firefox")
                 .with_memory(2 * 1024 * 1024 * 1024)

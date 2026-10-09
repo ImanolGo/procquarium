@@ -92,18 +92,18 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut config = Config::new(
-        cli.interval,
-        cli.max_fish,
-        cli.user,
-        cli.filter,
-        cli.kernel,
-        cli.ascii,
-        cli.screensaver,
-        cli.feed,
-        cli.seed,
-        cli.dump,
-    )?;
+    let mut config = Config::builder()
+        .interval(cli.interval)
+        .max_fish(cli.max_fish)
+        .user(cli.user)
+        .filter(cli.filter)
+        .kernel(cli.kernel)
+        .ascii(cli.ascii)
+        .screensaver(cli.screensaver)
+        .feed(cli.feed)
+        .seed(cli.seed)
+        .dump(cli.dump)
+        .build()?;
 
     if config.dump {
         // Give the CPU counters a moment to become meaningful.

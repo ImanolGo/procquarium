@@ -50,7 +50,6 @@ pub struct Tank {
     pub decor: Decor,
     pub width: u16,
     pub height: u16,
-    pub max_fish: usize,
     pub time: f32,
     /// Count of fish hatched this run, for the status line.
     pub hatched: u64,
@@ -63,7 +62,7 @@ pub struct Tank {
 }
 
 impl Tank {
-    pub fn new(width: u16, height: u16, max_fish: usize, seed: u64) -> Self {
+    pub fn new(width: u16, height: u16, seed: u64) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut decor = Decor::new();
         decor.configure(width, height, &mut rng);
@@ -74,7 +73,6 @@ impl Tank {
             decor,
             width,
             height,
-            max_fish,
             time: 0.0,
             hatched: 0,
             eaten: Vec::new(),
@@ -501,7 +499,7 @@ mod tests {
 
     #[test]
     fn spawn_event_produces_an_egg_then_a_fish() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let shell = proc(1, "shell");
         tank.apply(&[spawn(&shell)], &[shell], false);
         assert_eq!(tank.eggs.len(), 1);
@@ -521,7 +519,7 @@ mod tests {
 
     #[test]
     fn exit_event_makes_the_fish_float_and_disappear() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let shell = proc(1, "shell");
         tank.apply(&[spawn(&shell)], &[shell], false);
         for _ in 0..150 {
@@ -539,7 +537,7 @@ mod tests {
 
     #[test]
     fn dropping_out_of_top_n_swims_away_without_dying() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let shell = proc(1, "shell");
         tank.apply(&[spawn(&shell)], &[shell], false);
         for _ in 0..150 {
@@ -557,7 +555,7 @@ mod tests {
 
     #[test]
     fn unselected_spawn_gets_no_egg() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         tank.apply(&[spawn(&proc(1, "shell"))], &[], false);
         assert!(tank.eggs.is_empty());
         assert!(tank.fish.is_empty());
@@ -567,7 +565,7 @@ mod tests {
     fn degenerate_terminal_sizes_do_not_panic() {
         // Some terminals briefly report zero columns at startup.
         for (w, h) in [(0, 0), (1, 1), (2, 3), (4, 4)] {
-            let mut tank = Tank::new(w, h, 60, 1);
+            let mut tank = Tank::new(w, h, 1);
             let shell = proc(1, "shell");
             tank.apply(&[spawn(&shell)], &[shell], false);
             for _ in 0..200 {
@@ -578,7 +576,7 @@ mod tests {
 
     #[test]
     fn zombie_fish_stays_in_the_tank() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let shell = proc(1, "shell");
         tank.apply(&[spawn(&shell)], std::slice::from_ref(&shell), false);
         for _ in 0..150 {
@@ -600,7 +598,7 @@ mod tests {
 
     #[test]
     fn container_processes_become_jellyfish() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let nginx = proc(1, "nginx").container_process();
         tank.apply(&[spawn(&nginx)], &[nginx], false);
         assert!(tank.eggs.is_empty());
@@ -610,7 +608,7 @@ mod tests {
 
     #[test]
     fn kernel_threads_become_crabs_on_the_sand() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let kworker = proc(1, "kworker").kernel_thread();
         tank.apply(&[spawn(&kworker)], &[kworker], false);
         assert_eq!(tank.fish.len(), 1);
@@ -623,7 +621,7 @@ mod tests {
 
     #[test]
     fn a_fish_that_reaches_food_eats_it() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let shell = proc(1, "shell");
         tank.apply(&[spawn(&shell)], &[shell], false);
         for _ in 0..150 {
@@ -650,7 +648,7 @@ mod tests {
         // max_fish = 1. The big process is selected first; when it exits the
         // small one is promoted even though its own numbers never changed, so
         // diff reports nothing for it.
-        let mut tank = Tank::new(80, 24, 1, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let big = proc(1, "big").with_memory(900 * 1024 * 1024);
         let small = proc(2, "small").with_memory(10 * 1024 * 1024);
         tank.apply(&[spawn(&big), spawn(&small)], &[big], false);
@@ -677,7 +675,7 @@ mod tests {
 
     #[test]
     fn pid_reuse_gets_a_new_creature_while_the_corpse_floats() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let old = proc(1, "old").with_start_time(10);
         tank.apply(&[spawn(&old)], &[old], false);
         for _ in 0..150 {
@@ -696,7 +694,7 @@ mod tests {
 
     #[test]
     fn re_selected_leaving_fish_turns_around() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let shell = proc(1, "shell");
         tank.apply(&[spawn(&shell)], std::slice::from_ref(&shell), false);
         for _ in 0..150 {
@@ -716,7 +714,7 @@ mod tests {
 
     #[test]
     fn reconcile_keeps_exactly_the_selected_creatures() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let procs: Vec<ProcInfo> = (1..=5).map(|i| proc(i, "p")).collect();
         let events: Vec<ProcEvent> = procs.iter().map(spawn).collect();
         tank.apply(&events, &procs[..3], false);
@@ -728,7 +726,7 @@ mod tests {
 
     #[test]
     fn first_sample_places_fish_in_the_water_without_eggs() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let a = proc(1, "a");
         let b = proc(2, "b");
         tank.apply(&[spawn(&a), spawn(&b)], &[a, b], true);
@@ -740,7 +738,7 @@ mod tests {
 
     #[test]
     fn a_promoted_process_swims_in() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let a = proc(1, "a");
         let b = proc(2, "b");
         tank.apply(&[spawn(&a), spawn(&b)], std::slice::from_ref(&a), true);
@@ -755,7 +753,7 @@ mod tests {
 
     #[test]
     fn only_spawned_events_after_the_first_sample_lay_eggs() {
-        let mut tank = Tank::new(80, 24, 60, 1);
+        let mut tank = Tank::new(80, 24, 1);
         let a = proc(1, "a");
         tank.apply(&[spawn(&a)], std::slice::from_ref(&a), true);
         for _ in 0..150 {

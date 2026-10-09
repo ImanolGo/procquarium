@@ -30,29 +30,109 @@ pub struct Config {
     pub seed: Option<u64>,
     /// Print a snapshot and exit (hidden debugging flag).
     pub dump: bool,
+    /// Draw in the terminal's default colours (`NO_COLOR`).
+    pub mono: bool,
     /// Colours and sprites, optionally loaded from a config file.
     pub theme: Theme,
 }
 
 impl Config {
-    /// Build a config, validating the raw filter regex and interval.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        interval_secs: f64,
-        max_fish: usize,
-        user: Option<String>,
-        filter: Option<String>,
-        kernel: bool,
-        ascii: bool,
-        screensaver: bool,
-        feed: bool,
-        seed: Option<u64>,
-        dump: bool,
-    ) -> Result<Self> {
-        if !interval_secs.is_finite() || interval_secs <= 0.0 {
+    /// Start building a config; every field has a sensible default.
+    pub fn builder() -> ConfigBuilder {
+        ConfigBuilder::default()
+    }
+}
+
+/// Builder for [`Config`], so callers set only what they care about instead of
+/// passing a row of positional flags.
+#[derive(Debug, Clone)]
+pub struct ConfigBuilder {
+    interval_secs: f64,
+    max_fish: usize,
+    user: Option<String>,
+    filter: Option<String>,
+    kernel: bool,
+    ascii: bool,
+    screensaver: bool,
+    feed: bool,
+    seed: Option<u64>,
+    dump: bool,
+}
+
+impl Default for ConfigBuilder {
+    fn default() -> Self {
+        Self {
+            interval_secs: 1.0,
+            max_fish: 25,
+            user: None,
+            filter: None,
+            kernel: false,
+            ascii: false,
+            screensaver: false,
+            feed: false,
+            seed: None,
+            dump: false,
+        }
+    }
+}
+
+impl ConfigBuilder {
+    pub fn interval(mut self, secs: f64) -> Self {
+        self.interval_secs = secs;
+        self
+    }
+
+    pub fn max_fish(mut self, max_fish: usize) -> Self {
+        self.max_fish = max_fish;
+        self
+    }
+
+    pub fn user(mut self, user: Option<String>) -> Self {
+        self.user = user;
+        self
+    }
+
+    pub fn filter(mut self, filter: Option<String>) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    pub fn kernel(mut self, kernel: bool) -> Self {
+        self.kernel = kernel;
+        self
+    }
+
+    pub fn ascii(mut self, ascii: bool) -> Self {
+        self.ascii = ascii;
+        self
+    }
+
+    pub fn screensaver(mut self, screensaver: bool) -> Self {
+        self.screensaver = screensaver;
+        self
+    }
+
+    pub fn feed(mut self, feed: bool) -> Self {
+        self.feed = feed;
+        self
+    }
+
+    pub fn seed(mut self, seed: Option<u64>) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    pub fn dump(mut self, dump: bool) -> Self {
+        self.dump = dump;
+        self
+    }
+
+    /// Validate and build the config, with a clear error for anything invalid.
+    pub fn build(self) -> Result<Config> {
+        if !self.interval_secs.is_finite() || self.interval_secs <= 0.0 {
             bail!("--interval must be a positive number of seconds");
         }
-        let interval = Duration::try_from_secs_f64(interval_secs)
+        let interval = Duration::try_from_secs_f64(self.interval_secs)
             .map_err(|_| anyhow::anyhow!("--interval is too large"))?;
         if interval < sysinfo::MINIMUM_CPU_UPDATE_INTERVAL {
             bail!(
@@ -64,11 +144,11 @@ impl Config {
         if interval > Duration::from_secs(3600) {
             bail!("--interval must be at most 3600 seconds");
         }
-        if !(1..=500).contains(&max_fish) {
+        if !(1..=500).contains(&self.max_fish) {
             bail!("--max-fish must be between 1 and 500");
         }
 
-        let filter = match filter {
+        let filter = match self.filter {
             Some(pattern) => Some(
                 Regex::new(&pattern)
                     .map_err(|e| anyhow::anyhow!("--filter is not a valid regex: {e}"))?,
@@ -76,17 +156,18 @@ impl Config {
             None => None,
         };
 
-        Ok(Self {
+        Ok(Config {
             interval,
-            max_fish,
-            user: user.filter(|u| !u.is_empty()),
+            max_fish: self.max_fish,
+            user: self.user.filter(|u| !u.is_empty()),
             filter,
-            kernel,
-            ascii,
-            screensaver,
-            feed,
-            seed,
-            dump,
+            kernel: self.kernel,
+            ascii: self.ascii,
+            screensaver: self.screensaver,
+            feed: self.feed,
+            seed: self.seed,
+            dump: self.dump,
+            mono: std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
             theme: Theme::default(),
         })
     }
@@ -96,15 +177,10 @@ impl Config {
 mod tests {
     use super::*;
 
-    /// A valid config with everything off.
-    fn config() -> Config {
-        Config::new(1.0, 60, None, None, false, false, false, false, None, false).expect("valid")
-    }
-
     #[test]
     fn defaults_are_sane() {
-        let c = config();
-        assert_eq!(c.max_fish, 60);
+        let c = Config::builder().build().expect("valid");
+        assert_eq!(c.max_fish, 25);
         assert_eq!(c.interval, Duration::from_secs(1));
         assert!(c.filter.is_none());
         assert!(!c.feed);
@@ -112,76 +188,38 @@ mod tests {
 
     #[test]
     fn rejects_bad_intervals() {
-        let bad = |secs| {
-            Config::new(
-                secs, 60, None, None, false, false, false, false, None, false,
-            )
-            .is_err()
-        };
+        let bad = |secs| Config::builder().interval(secs).build().is_err();
         assert!(bad(0.0));
         assert!(bad(-1.0));
         assert!(bad(1e20), "must not panic on overflow");
         assert!(bad(f64::NAN));
         assert!(bad(0.1), "below the sysinfo minimum");
         assert!(bad(9999.0), "above the maximum");
-        // The sysinfo minimum itself is accepted.
         assert!(
-            Config::new(
-                sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_secs_f64(),
-                60,
-                None,
-                None,
-                false,
-                false,
-                false,
-                false,
-                None,
-                false,
-            )
-            .is_ok()
+            Config::builder()
+                .interval(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_secs_f64())
+                .build()
+                .is_ok()
         );
     }
 
     #[test]
     fn rejects_out_of_range_max_fish() {
-        let bad =
-            |n| Config::new(1.0, n, None, None, false, false, false, false, None, false).is_err();
-        assert!(bad(0));
-        assert!(bad(501));
+        assert!(Config::builder().max_fish(0).build().is_err());
+        assert!(Config::builder().max_fish(501).build().is_err());
     }
 
     #[test]
     fn rejects_bad_regex() {
-        let err = Config::new(
-            1.0,
-            60,
-            None,
-            Some("(".into()),
-            false,
-            false,
-            false,
-            false,
-            None,
-            false,
-        );
-        assert!(err.is_err());
+        assert!(Config::builder().filter(Some("(".into())).build().is_err());
     }
 
     #[test]
     fn compiles_filter() {
-        let c = Config::new(
-            1.0,
-            60,
-            None,
-            Some("^fire.*".into()),
-            false,
-            false,
-            false,
-            false,
-            None,
-            false,
-        )
-        .expect("valid");
-        assert!(c.filter.unwrap().is_match("firefox"));
+        let c = Config::builder()
+            .filter(Some("^fire.*".into()))
+            .build()
+            .expect("valid");
+        assert!(c.filter.expect("filter").is_match("firefox"));
     }
 }
