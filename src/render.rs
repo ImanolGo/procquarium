@@ -143,6 +143,21 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 Style::default().fg(PANEL_FG),
             );
         }
+        if let Some(query) = app.search_query() {
+            let y = area.bottom() as i32 - 1;
+            let style = Style::default().bg(PANEL_BG).fg(PANEL_FG);
+            for x in area.x..area.right() {
+                put(buf, area, i32::from(x), y, ' ', style);
+            }
+            draw_text(
+                buf,
+                area,
+                i32::from(area.x) + 1,
+                y,
+                &format!("/{query}"),
+                style,
+            );
+        }
     }
 
     // NO_COLOR: keep the glyphs but drop every colour and attribute.

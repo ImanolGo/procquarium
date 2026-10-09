@@ -95,6 +95,7 @@ Keys while it's running:
 | `+` / `-` | More or fewer fish |
 | `f` | Drop food (with `--feed`) |
 | Click a fish | Select it (click empty water to clear) |
+| `/` | Search for a process by name |
 
 Flags:
 

@@ -220,6 +220,19 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
             if screensaver {
                 return true;
             }
+            // While the search line is open, keys edit the query.
+            if app.search_query().is_some() {
+                match key.code {
+                    KeyCode::Esc => app.search_cancel(),
+                    KeyCode::Enter => app.search_commit(),
+                    KeyCode::Backspace => app.search_backspace(),
+                    KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.search_push(c);
+                    }
+                    _ => {}
+                }
+                return false;
+            }
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => return true,
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -228,6 +241,7 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
                 KeyCode::Char(' ') => app.paused = !app.paused,
                 KeyCode::Char('l') => app.show_labels = !app.show_labels,
                 KeyCode::Char('f') => app.drop_food(),
+                KeyCode::Char('/') => app.start_search(),
                 KeyCode::Tab => app.select_next(key.modifiers.contains(KeyModifiers::SHIFT)),
                 KeyCode::BackTab => app.select_next(true),
                 KeyCode::Char('+') | KeyCode::Char('=') => app.adjust_max_fish(10),

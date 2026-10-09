@@ -34,6 +34,10 @@ pub struct App {
     streaks: HashMap<(u32, u64), u8>,
     /// Recent CPU samples per creature, for the details sparkline.
     history: HashMap<(u32, u64), VecDeque<f32>>,
+    /// The active search query, when `/` is open.
+    search: Option<String>,
+    /// Selection to restore if the search is cancelled.
+    search_prev: Option<u32>,
 }
 
 /// How many CPU samples to remember, and how many to draw.
@@ -57,6 +61,8 @@ impl App {
             pending_restores: Vec::new(),
             streaks: HashMap::new(),
             history: HashMap::new(),
+            search: None,
+            search_prev: None,
         }
     }
 
@@ -163,6 +169,59 @@ impl App {
             None => 0,
         };
         self.selected = Some(pids[next]);
+    }
+
+    /// The active search query, when `/` is open.
+    pub fn search_query(&self) -> Option<&str> {
+        self.search.as_deref()
+    }
+
+    /// Open the search line, remembering the selection to restore on cancel.
+    pub fn start_search(&mut self) {
+        self.search_prev = self.selected;
+        self.search = Some(String::new());
+    }
+
+    /// Add a character to the query and jump to the first matching fish.
+    pub fn search_push(&mut self, c: char) {
+        if let Some(query) = &mut self.search {
+            query.push(c);
+        }
+        self.select_first_match();
+    }
+
+    /// Delete the last character of the query.
+    pub fn search_backspace(&mut self) {
+        if let Some(query) = &mut self.search {
+            query.pop();
+        }
+        self.select_first_match();
+    }
+
+    /// Keep the current selection and close the search.
+    pub fn search_commit(&mut self) {
+        self.search = None;
+    }
+
+    /// Close the search and put the selection back where it was.
+    pub fn search_cancel(&mut self) {
+        self.search = None;
+        self.selected = self.search_prev;
+    }
+
+    fn select_first_match(&mut self) {
+        let Some(query) = self.search.clone() else {
+            return;
+        };
+        if query.is_empty() {
+            return;
+        }
+        let needle = query.to_lowercase();
+        self.selected = self.tank.fish_pids().into_iter().find(|pid| {
+            self.tank
+                .fish(*pid)
+                .is_some_and(|f| f.info.name.to_lowercase().contains(&needle))
+        });
     }
 
     /// Select the fish under a terminal cell, or clear the selection when the
@@ -369,6 +428,42 @@ mod tests {
 
     fn config_max(n: usize) -> Config {
         Config::builder().max_fish(n).build().expect("valid")
+    }
+
+    #[test]
+    fn search_selects_the_first_matching_fish() {
+        let mut app = App::new(config(), 80, 24, 1);
+        app.apply_snapshot(snapshot(vec![proc(1, "firefox"), proc(2, "cargo")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.start_search();
+        app.search_push('c');
+        app.search_push('a');
+        let name = app
+            .selected
+            .and_then(|pid| app.tank.fish(pid))
+            .map(|f| f.info.name.clone());
+        assert_eq!(name.as_deref(), Some("cargo"));
+
+        app.search_commit();
+        assert!(app.search_query().is_none());
+        assert_eq!(app.selected, Some(2), "commit keeps the selection");
+    }
+
+    #[test]
+    fn cancelling_search_restores_the_selection() {
+        let mut app = App::new(config(), 80, 24, 1);
+        app.apply_snapshot(snapshot(vec![proc(1, "firefox"), proc(2, "cargo")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.selected = Some(1);
+        app.start_search();
+        app.search_push('c');
+        assert_eq!(app.selected, Some(2), "moved to the match");
+        app.search_cancel();
+        assert_eq!(app.selected, Some(1), "cancel restores it");
     }
 
     #[test]
