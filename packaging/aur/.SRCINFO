@@ -1,6 +1,6 @@
 pkgbase = procquarium
 	pkgdesc = Your running processes, as fish
-	pkgver = 0.2.3
+	pkgver = 0.2.4
 	pkgrel = 1
 	url = https://github.com/ImanolGo/procquarium
 	arch = x86_64
@@ -8,7 +8,7 @@ pkgbase = procquarium
 	license = MIT
 	makedepends = rust
 	depends = gcc-libs
-	source = procquarium-0.2.3.tar.gz::https://github.com/ImanolGo/procquarium/archive/refs/tags/v0.2.3.tar.gz
-	sha256sums = 83b8fcbd716397e29713867a462c9b997d9473bff1deba755832750e5385f72c
+	source = procquarium-0.2.4.tar.gz::https://github.com/ImanolGo/procquarium/archive/refs/tags/v0.2.4.tar.gz
+	sha256sums = b790d617a5d2e86b856e46d13831f068a24d64857ee7373993ba28711b61c481
 
 pkgname = procquarium
