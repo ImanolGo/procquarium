@@ -67,6 +67,7 @@ pub fn proc(pid: u32, name: &str) -> ProcInfo {
         user: None,
         start_time: 1,
         kernel: false,
+        container: false,
     }
 }
 
@@ -103,6 +104,11 @@ impl ProcInfo {
 
     pub fn kernel_thread(mut self) -> Self {
         self.kernel = true;
+        self
+    }
+
+    pub fn container_process(mut self) -> Self {
+        self.container = true;
         self
     }
 }

@@ -27,11 +27,36 @@ pub enum FishState {
     Leaving,
 }
 
+/// What kind of creature a process turns into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreatureKind {
+    /// An ordinary process.
+    Fish,
+    /// A kernel thread: scuttles along the sand.
+    Crab,
+    /// A container process: pulses up and down in the water.
+    Jellyfish,
+}
+
+impl CreatureKind {
+    pub fn for_info(info: &ProcInfo) -> Self {
+        if info.kernel {
+            Self::Crab
+        } else if info.container {
+            Self::Jellyfish
+        } else {
+            Self::Fish
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Fish {
     pub pid: u32,
     pub info: ProcInfo,
     pub state: FishState,
+    /// Which creature this is (fish, crab or jellyfish).
+    pub kind: CreatureKind,
     /// Centre position in cells.
     pub pos: (f32, f32),
     pub vel: (f32, f32),
@@ -57,7 +82,14 @@ pub struct Fish {
 }
 
 impl Fish {
-    pub fn new(info: ProcInfo, pos: (f32, f32), home_y: f32, phase: f32, facing: Facing) -> Self {
+    pub fn new(
+        info: ProcInfo,
+        pos: (f32, f32),
+        home_y: f32,
+        phase: f32,
+        facing: Facing,
+        kind: CreatureKind,
+    ) -> Self {
         let target_size = f32::from(mapping::size_class(info.memory));
         let target_speed = if info.status == ProcStatus::Zombie {
             1.0
@@ -72,6 +104,7 @@ impl Fish {
             pid: info.pid,
             info,
             state: FishState::Alive,
+            kind,
             pos,
             vel: (vel_x, 0.0),
             size: target_size,
@@ -139,6 +172,11 @@ impl Fish {
         match self.state {
             FishState::Exiting => {
                 self.timer += dt;
+                if self.kind == CreatureKind::Crab {
+                    // A crab has nowhere to float; it just fades on the sand.
+                    self.death += dt / FADE_TIME;
+                    return;
+                }
                 let rise = 1.0 - (-dt / 1.2).exp();
                 self.pos.1 += (0.3 - self.pos.1) * rise;
                 self.pos.0 += self.vel.0 * dt * 0.15;
@@ -174,6 +212,23 @@ impl Fish {
             FishState::Alive => {}
         }
 
+        match self.kind {
+            CreatureKind::Fish => self.alive_fish(dt, w, parent, top, bottom, margin),
+            CreatureKind::Crab => self.alive_crab(dt, w, bottom),
+            CreatureKind::Jellyfish => self.alive_jellyfish(dt, w, top, bottom),
+        }
+    }
+
+    /// A normal fish: wander, school, cruise and avoid the walls.
+    fn alive_fish(
+        &mut self,
+        dt: f32,
+        w: f32,
+        parent: Option<(f32, f32)>,
+        top: f32,
+        bottom: f32,
+        margin: f32,
+    ) {
         // Wander: deterministic pseudo-noise, so a fixed seed gives a fixed tank.
         let noise_x = (self.age * 0.8 + self.phase).sin();
         let noise_y = (self.age * 0.6 + self.phase * 1.7).cos();
@@ -228,6 +283,52 @@ impl Fish {
             self.facing = Facing::Left;
         }
     }
+
+    /// A crab: glued to the sand, scuttling side to side.
+    fn alive_crab(&mut self, dt: f32, w: f32, bottom: f32) {
+        let sand = bottom + 1.0;
+        self.pos.1 = sand;
+        self.vel.1 = 0.0;
+        let speed = 1.2 + self.speed * 0.08;
+        let dir = match self.facing {
+            Facing::Right => 1.0,
+            Facing::Left => -1.0,
+        };
+        self.vel.0 = dir * speed;
+        self.pos.0 += self.vel.0 * dt;
+        let left = 1.0;
+        let right = (w - 2.0).max(left);
+        if self.pos.0 <= left {
+            self.pos.0 = left;
+            self.facing = Facing::Right;
+        } else if self.pos.0 >= right {
+            self.pos.0 = right;
+            self.facing = Facing::Left;
+        }
+    }
+
+    /// A jellyfish: drifts slowly and pulses up and down around its home depth.
+    fn alive_jellyfish(&mut self, dt: f32, w: f32, top: f32, bottom: f32) {
+        let span = (bottom - top).max(1.0);
+        self.vel.0 += (self.age * 0.5 + self.phase).sin() * 1.5 * dt;
+        let vmax_x = self.speed * 0.4 + 1.0;
+        self.vel.0 = self.vel.0.clamp(-vmax_x, vmax_x);
+
+        let desired_y = self.home_y + (self.age * 0.5 + self.phase).sin() * span * 0.25;
+        let vmax_y = self.speed * 0.3 + 1.0;
+        self.vel.1 = ((desired_y - self.pos.1) * 0.8).clamp(-vmax_y, vmax_y);
+
+        self.pos.0 += self.vel.0 * dt;
+        self.pos.1 += self.vel.1 * dt;
+        self.pos.0 = self.pos.0.clamp(0.5, (w - 1.5).max(0.5));
+        self.pos.1 = self.pos.1.clamp(top, bottom);
+
+        if self.vel.0 > 0.05 {
+            self.facing = Facing::Right;
+        } else if self.vel.0 < -0.05 {
+            self.facing = Facing::Left;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -238,7 +339,54 @@ mod tests {
 
     fn fish(mem: u64, cpu: f32) -> Fish {
         let info = proc(1, "test").with_memory(mem).with_cpu(cpu);
-        Fish::new(info, (20.0, 10.0), 10.0, 0.0, Facing::Right)
+        Fish::new(
+            info,
+            (20.0, 10.0),
+            10.0,
+            0.0,
+            Facing::Right,
+            CreatureKind::Fish,
+        )
+    }
+
+    fn creature(info: ProcInfo, kind: CreatureKind) -> Fish {
+        Fish::new(info, (20.0, 10.0), 10.0, 0.0, Facing::Right, kind)
+    }
+
+    #[test]
+    fn creature_kind_follows_the_process() {
+        assert_eq!(CreatureKind::for_info(&proc(1, "p")), CreatureKind::Fish);
+        assert_eq!(
+            CreatureKind::for_info(&proc(1, "p").container_process()),
+            CreatureKind::Jellyfish
+        );
+        assert_eq!(
+            CreatureKind::for_info(&proc(1, "p").kernel_thread()),
+            CreatureKind::Crab
+        );
+    }
+
+    #[test]
+    fn crabs_stay_on_the_sand() {
+        let mut c = creature(proc(1, "kworker").kernel_thread(), CreatureKind::Crab);
+        for _ in 0..500 {
+            c.update(0.05, 80.0, 24.0, None);
+            assert_eq!(c.pos.1, 23.0, "crab should sit on the sand row");
+            assert!((1.0..=78.0).contains(&c.pos.0));
+        }
+    }
+
+    #[test]
+    fn jellyfish_pulse_up_and_down() {
+        let mut j = creature(proc(1, "container").with_cpu(0.0), CreatureKind::Jellyfish);
+        let mut min = f32::MAX;
+        let mut max = f32::MIN;
+        for _ in 0..1000 {
+            j.update(0.03, 80.0, 24.0, None);
+            min = min.min(j.pos.1);
+            max = max.max(j.pos.1);
+        }
+        assert!(max - min > 1.0, "jellyfish should move vertically");
     }
 
     #[test]

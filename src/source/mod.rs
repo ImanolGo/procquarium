@@ -30,6 +30,8 @@ pub struct ProcInfo {
     pub start_time: u64,
     /// True for kernel threads (Linux: no executable path and parent 2, or pid 2).
     pub kernel: bool,
+    /// True when the process appears to run inside a container.
+    pub container: bool,
 }
 
 impl ProcInfo {
@@ -90,6 +92,7 @@ mod tests {
             user: None,
             start_time: 1,
             kernel: false,
+            container: false,
         }
     }
 

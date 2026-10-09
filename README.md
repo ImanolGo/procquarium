@@ -29,6 +29,8 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 | An egg hatching on the sand | A process that just started |
 | A belly-up fish drifting upwards | A process that just exited |
 | A grey fish with ✕ eyes | A zombie process |
+| A crab scuttling on the sand | A kernel thread (with `--kernel`) |
+| A jellyfish pulsing | A process inside a container (Linux) |
 | Water getting darker | Overall system load rising |
 
 ## Install
@@ -70,7 +72,7 @@ Flags:
 | `--max-fish <N>` | Maximum number of fish (default 25) |
 | `--user <USER>` | Only show processes owned by this user |
 | `--filter <REGEX>` | Only show processes whose name matches |
-| `--kernel` | Include kernel threads (hidden by default) |
+| `--kernel` | Include kernel threads (they appear as crabs) |
 | `--ascii` | Use plain ASCII glyphs instead of the Unicode ones |
 | `--screensaver` | Exit on any key or mouse event; no labels or info box |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |

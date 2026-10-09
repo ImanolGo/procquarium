@@ -101,30 +101,53 @@ impl App {
     }
 }
 
-/// Choose which processes deserve a fish: apply the filters, rank by score,
-/// keep the top `max_fish`. Pure, so it is easy to test.
+/// How many kernel threads show up as crabs when `--kernel` is on. They score
+/// near zero, so without a reserved slot they would never win a fish.
+const CRAB_LIMIT: usize = 6;
+
+/// Choose which processes appear: apply the filters, rank ordinary processes by
+/// score and keep the top `max_fish`. With `--kernel`, a handful of kernel
+/// threads are added as crabs beyond the fish budget. Pure, so easy to test.
 pub fn select_pids(snapshot: &Snapshot, config: &Config) -> Vec<u32> {
-    let mut candidates: Vec<&ProcInfo> = snapshot
+    let passes = |p: &ProcInfo| -> bool {
+        config
+            .user
+            .as_ref()
+            .is_none_or(|user| p.user.as_deref() == Some(user.as_str()))
+            && config.filter.as_ref().is_none_or(|re| re.is_match(&p.name))
+    };
+
+    let mut fish: Vec<&ProcInfo> = snapshot
         .procs
         .values()
-        .filter(|p| config.kernel || !p.kernel)
-        .filter(|p| {
-            config
-                .user
-                .as_ref()
-                .is_none_or(|user| p.user.as_deref() == Some(user.as_str()))
-        })
-        .filter(|p| config.filter.as_ref().is_none_or(|re| re.is_match(&p.name)))
+        .filter(|p| !p.kernel && passes(p))
         .collect();
-
-    candidates.sort_by(|a, b| {
+    fish.sort_by(|a, b| {
         b.score()
             .partial_cmp(&a.score())
             .unwrap_or(Ordering::Equal)
             .then_with(|| a.pid.cmp(&b.pid))
     });
-    candidates.truncate(config.max_fish);
-    candidates.into_iter().map(|p| p.pid).collect()
+    fish.truncate(config.max_fish);
+
+    let mut pids: Vec<u32> = fish.into_iter().map(|p| p.pid).collect();
+
+    if config.kernel {
+        let mut crabs: Vec<&ProcInfo> = snapshot
+            .procs
+            .values()
+            .filter(|p| p.kernel && passes(p))
+            .collect();
+        crabs.sort_by(|a, b| {
+            b.score()
+                .partial_cmp(&a.score())
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.pid.cmp(&b.pid))
+        });
+        pids.extend(crabs.into_iter().take(CRAB_LIMIT).map(|p| p.pid));
+    }
+
+    pids
 }
 
 #[cfg(test)]
@@ -160,6 +183,21 @@ mod tests {
         let mut c = config();
         c.user = Some("imanolgo".to_string());
         assert_eq!(select_pids(&snap, &c), vec![1]);
+    }
+
+    #[test]
+    fn kernel_threads_get_reserved_crab_slots() {
+        let mut procs = vec![proc(1, "hot").with_cpu(50.0)];
+        for pid in 10..20 {
+            procs.push(proc(pid, "worker"));
+        }
+        procs.push(proc(99, "kworker").kernel_thread());
+        let mut c = config();
+        c.max_fish = 3;
+        c.kernel = true;
+        let picked = select_pids(&snapshot(procs), &c);
+        assert_eq!(picked.len(), 4, "3 fish plus one crab");
+        assert!(picked.contains(&99));
     }
 
     #[test]

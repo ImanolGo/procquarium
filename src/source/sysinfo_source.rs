@@ -16,6 +16,9 @@ pub struct SysinfoSource {
     users: Users,
     /// Number of logical CPUs, for turning summed process CPU into a 0..=1 load.
     ncpu: f32,
+    /// Cached container classification keyed by pid, tagged with the start time
+    /// it was computed for so a reused PID is re-checked.
+    container_cache: HashMap<u32, (u64, bool)>,
 }
 
 impl SysinfoSource {
@@ -29,6 +32,7 @@ impl SysinfoSource {
             system,
             users: Users::new_with_refreshed_list(),
             ncpu,
+            container_cache: HashMap::new(),
         }
     }
 }
@@ -59,6 +63,34 @@ fn map_status(status: sysinfo::ProcessStatus) -> ProcStatus {
     }
 }
 
+/// Best-effort container detection. On Linux a process inside a container has a
+/// cgroup path naming the runtime; everywhere else we cannot tell, so we say no.
+#[cfg(target_os = "linux")]
+fn detect_container(pid: u32) -> bool {
+    const HINTS: [&str; 8] = [
+        "docker",
+        "kubepods",
+        "containerd",
+        "libpod",
+        "podman",
+        "lxc",
+        "garden",
+        "sandbox",
+    ];
+    match std::fs::read_to_string(format!("/proc/{pid}/cgroup")) {
+        Ok(contents) => {
+            let lower = contents.to_ascii_lowercase();
+            HINTS.iter().any(|hint| lower.contains(hint))
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn detect_container(_pid: u32) -> bool {
+    false
+}
+
 impl ProcessSource for SysinfoSource {
     fn snapshot(&mut self) -> Result<Snapshot> {
         self.system
@@ -72,6 +104,15 @@ impl ProcessSource for SysinfoSource {
             let exe = process.exe();
             let name = process.name().to_string_lossy().into_owned();
             let kernel = exe.is_none() && (parent == Some(2) || pid == 2);
+            let start_time = process.start_time();
+            let container = match self.container_cache.get(&pid) {
+                Some((cached_at, value)) if *cached_at == start_time => *value,
+                _ => {
+                    let value = detect_container(pid);
+                    self.container_cache.insert(pid, (start_time, value));
+                    value
+                }
+            };
             let user = process
                 .user_id()
                 .and_then(|id| self.users.get_user_by_id(id))
@@ -89,11 +130,16 @@ impl ProcessSource for SysinfoSource {
                     memory: process.memory(),
                     status: map_status(process.status()),
                     user,
-                    start_time: process.start_time(),
+                    start_time,
                     kernel,
+                    container,
                 },
             );
         }
+
+        // Drop classifications for processes that are gone.
+        self.container_cache
+            .retain(|pid, _| procs.contains_key(pid));
 
         // Summed per-core CPU over every process gives total load on the box.
         let load = (cpu_total / (self.ncpu * 100.0)).clamp(0.0, 1.0);

@@ -15,7 +15,7 @@ use crate::diff::ProcEvent;
 use crate::source::ProcInfo;
 
 use decor::Decor;
-use fish::{Facing, Fish, FishState};
+use fish::{CreatureKind, Facing, Fish, FishState};
 
 /// How long an egg wobbles on the sand before it hatches.
 const EGG_TIME: f32 = 1.0;
@@ -100,6 +100,40 @@ impl Tank {
         });
     }
 
+    /// Add the creature for a newly selected process: fish hatch from eggs,
+    /// crabs and jellyfish appear directly.
+    fn ensure_creature(&mut self, info: ProcInfo) {
+        if self.contains(info.pid) {
+            return;
+        }
+        match CreatureKind::for_info(&info) {
+            CreatureKind::Fish => self.ensure_egg(info),
+            kind => self.spawn_creature(info, kind),
+        }
+    }
+
+    fn spawn_creature(&mut self, info: ProcInfo, kind: CreatureKind) {
+        let w = self.width.max(4) as f32;
+        let h = self.height.max(3) as f32;
+        let x = self.rng.random_range(2.0..(w - 2.0).max(3.0));
+        let (y, home_y) = match kind {
+            CreatureKind::Crab => (h - 1.0, h - 1.0),
+            CreatureKind::Jellyfish => {
+                let home = self.rng.random_range(4.0..(h - 3.0).max(5.0));
+                (home, home)
+            }
+            CreatureKind::Fish => (h - 2.0, h - 2.0),
+        };
+        let phase = self.rng.random_range(0.0..std::f32::consts::TAU);
+        let facing = if self.rng.random::<bool>() {
+            Facing::Right
+        } else {
+            Facing::Left
+        };
+        self.fish
+            .push(Fish::new(info, (x, y), home_y, phase, facing, kind));
+    }
+
     /// Apply process events, then make any fish that is no longer in the
     /// selected set swim away.
     pub fn apply(&mut self, events: &[ProcEvent], selected: &HashSet<u32>) {
@@ -107,7 +141,7 @@ impl Tank {
             match event {
                 ProcEvent::Spawned(info) => {
                     if selected.contains(&info.pid) {
-                        self.ensure_egg(info.clone());
+                        self.ensure_creature(info.clone());
                     }
                 }
                 ProcEvent::Exited { pid } => {
@@ -120,7 +154,7 @@ impl Tank {
                     if let Some(f) = self.fish.iter_mut().find(|f| f.pid == info.pid) {
                         f.apply_info(info.clone());
                     } else if selected.contains(&info.pid) {
-                        self.ensure_egg(info.clone());
+                        self.ensure_creature(info.clone());
                     }
                 }
             }
@@ -161,7 +195,14 @@ impl Tank {
             } else {
                 Facing::Left
             };
-            let mut f = Fish::new(info, (x, h - 2.0), home_y, phase, facing);
+            let mut f = Fish::new(
+                info,
+                (x, h - 2.0),
+                home_y,
+                phase,
+                facing,
+                CreatureKind::Fish,
+            );
             f.vel.1 = -2.5;
             self.fish.push(f);
             self.hatched += 1;
@@ -302,5 +343,34 @@ mod tests {
         }
         assert_eq!(tank.fish.len(), 1);
         assert!(tank.fish[0].is_zombie());
+    }
+
+    #[test]
+    fn container_processes_become_jellyfish() {
+        let mut tank = Tank::new(80, 24, 60, 1);
+        let sel = selected(&[1]);
+        tank.apply(
+            &[ProcEvent::Spawned(proc(1, "nginx").container_process())],
+            &sel,
+        );
+        assert!(tank.eggs.is_empty());
+        assert_eq!(tank.fish.len(), 1);
+        assert_eq!(tank.fish[0].kind, CreatureKind::Jellyfish);
+    }
+
+    #[test]
+    fn kernel_threads_become_crabs_on_the_sand() {
+        let mut tank = Tank::new(80, 24, 60, 1);
+        let sel = selected(&[1]);
+        tank.apply(
+            &[ProcEvent::Spawned(proc(1, "kworker").kernel_thread())],
+            &sel,
+        );
+        assert_eq!(tank.fish.len(), 1);
+        assert_eq!(tank.fish[0].kind, CreatureKind::Crab);
+        for _ in 0..100 {
+            tank.update(0.05);
+        }
+        assert_eq!(tank.fish[0].pos.1, 23.0, "crab sits on the sand");
     }
 }

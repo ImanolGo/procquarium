@@ -152,6 +152,7 @@ mod tests {
             10.0,
             0.0,
             Facing::Right,
+            crate::tank::fish::CreatureKind::Fish,
         );
         f.speed = 20.0;
         let mut spawned_near_fish = false;

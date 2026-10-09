@@ -81,6 +81,25 @@ pub fn dead_sprite_into(out: &mut Vec<char>, size: u8, facing_left: bool, ascii:
     }
 }
 
+const CRAB: &str = "><°°><";
+const CRAB_ASCII: &str = "><oo><";
+const JELLYFISH: &str = "~(°°)~";
+const JELLYFISH_ASCII: &str = "~(oo)~";
+
+/// A crab (kernel thread). Crabs walk sideways, so there is no facing.
+pub fn crab_into(out: &mut Vec<char>, ascii: bool, zombie: bool) {
+    out.clear();
+    out.extend(if ascii { CRAB_ASCII } else { CRAB }.chars());
+    replace_eye(out, eye(ascii, zombie));
+}
+
+/// A jellyfish (container process).
+pub fn jellyfish_into(out: &mut Vec<char>, ascii: bool, zombie: bool) {
+    out.clear();
+    out.extend(if ascii { JELLYFISH_ASCII } else { JELLYFISH }.chars());
+    replace_eye(out, eye(ascii, zombie));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +162,21 @@ mod tests {
         let mut mirrored = Vec::new();
         dead_sprite_into(&mut mirrored, 2, true, false);
         assert_eq!(mirrored, ">))✕<".chars().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn crab_and_jellyfish_sprites() {
+        let mut crab = Vec::new();
+        crab_into(&mut crab, false, false);
+        assert_eq!(crab, "><°°><".chars().collect::<Vec<_>>());
+        crab_into(&mut crab, true, true);
+        assert_eq!(crab, "><xx><".chars().collect::<Vec<_>>());
+
+        let mut jelly = Vec::new();
+        jellyfish_into(&mut jelly, false, false);
+        assert_eq!(jelly, "~(°°)~".chars().collect::<Vec<_>>());
+        jellyfish_into(&mut jelly, true, true);
+        assert_eq!(jelly, "~(xx)~".chars().collect::<Vec<_>>());
     }
 
     #[test]

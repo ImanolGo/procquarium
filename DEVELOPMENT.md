@@ -89,6 +89,20 @@ thread (smooths the spikes), refreshing memory on alternate samples, or
 adapting the sample interval — none of which change the picture much, so they
 were left for later.
 
+## After 0.1
+
+These were listed in PLAN.md under "Ideas for after 0.1" and built afterwards,
+one commit each:
+
+- **Day/night.** The source sums per-process CPU against the logical core count
+  to get a 0..=1 load, and the renderer dims the water by it (capped so a busy
+  box looks like dusk, not a black screen).
+- **Crabs and jellyfish.** Kernel threads become crabs glued to the sand
+  (shown with `--kernel`), and container processes become pulsing jellyfish.
+  Kernel threads score near zero so they get reserved slots rather than
+  competing for fish; container detection reads `/proc/<pid>/cgroup` on Linux
+  and is cached per process, so it costs nothing after the first sample.
+
 ## Running it
 
 ```sh

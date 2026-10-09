@@ -9,7 +9,7 @@ use ratatui::widgets::Paragraph;
 
 use crate::app::App;
 use crate::source::ProcStatus;
-use crate::tank::fish::{Facing, Fish, FishState};
+use crate::tank::fish::{CreatureKind, Facing, Fish, FishState};
 use crate::tank::{mapping, sprites};
 
 const WATER_TOP: Color = Color::Rgb(8, 24, 48);
@@ -238,10 +238,13 @@ fn draw_fish(
 
     let facing_left = fish.facing == Facing::Left;
     let size = fish.size.round().clamp(0.0, 3.0) as u8;
-    if fish.state == FishState::Exiting {
-        sprites::dead_sprite_into(sprite_buf, size, facing_left, ascii);
-    } else {
-        sprites::sprite_into(sprite_buf, size, facing_left, ascii, zombie);
+    match fish.kind {
+        CreatureKind::Crab => sprites::crab_into(sprite_buf, ascii, zombie),
+        CreatureKind::Jellyfish => sprites::jellyfish_into(sprite_buf, ascii, zombie),
+        CreatureKind::Fish if fish.state == FishState::Exiting => {
+            sprites::dead_sprite_into(sprite_buf, size, facing_left, ascii);
+        }
+        CreatureKind::Fish => sprites::sprite_into(sprite_buf, size, facing_left, ascii, zombie),
     }
 
     let len = sprite_buf.len() as i32;
