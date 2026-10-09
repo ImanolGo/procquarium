@@ -26,7 +26,9 @@ pub struct App {
     /// Username of our own process, so we never feed another user's processes.
     self_user: Option<String>,
     /// Pids that ate since the last drain and are due a priority nudge.
-    pending_boosts: Vec<u32>,
+    pending_boosts: Vec<(u32, u64)>,
+    /// Processes that left and whose priority nudge should be undone.
+    pending_restores: Vec<(u32, u64)>,
 }
 
 impl App {
@@ -45,6 +47,7 @@ impl App {
             tick: 0.0,
             self_user: None,
             pending_boosts: Vec::new(),
+            pending_restores: Vec::new(),
         }
     }
 
@@ -75,17 +78,14 @@ impl App {
             self.tank.update(dt);
         }
 
-        // Anything that ate and is ours becomes a pending priority nudge.
-        for pid in self.tank.take_eaten() {
-            let owned = self
-                .tank
-                .fish(pid)
-                .map(|f| owns_process(&f.info, self.self_user.as_deref()))
-                .unwrap_or(false);
-            if self.config.feed && owned {
-                self.pending_boosts.push(pid);
+        // Anything that ate and is ours becomes a pending priority nudge, and
+        // anything that left the tank should have its nudge undone.
+        for info in self.tank.take_eaten() {
+            if self.config.feed && owns_process(&info, self.self_user.as_deref()) {
+                self.pending_boosts.push(info.identity());
             }
         }
+        self.pending_restores.extend(self.tank.take_departed());
     }
 
     /// Drop a pellet of food: above the selected fish if there is one, otherwise
@@ -101,9 +101,14 @@ impl App {
         self.tank.drop_food(x);
     }
 
-    /// Take the pids that should be reniced since the last call.
-    pub fn take_pending_boosts(&mut self) -> Vec<u32> {
+    /// Take the processes that should be reniced since the last call.
+    pub fn take_pending_boosts(&mut self) -> Vec<(u32, u64)> {
         std::mem::take(&mut self.pending_boosts)
+    }
+
+    /// Take the processes whose priority nudge should be undone.
+    pub fn take_pending_restores(&mut self) -> Vec<(u32, u64)> {
+        std::mem::take(&mut self.pending_restores)
     }
 
     pub fn resize(&mut self, width: u16, height: u16) {

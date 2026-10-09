@@ -132,7 +132,10 @@ fn main() -> Result<()> {
         }));
     }
 
-    let result = run(&mut terminal, source, config, seed);
+    let result = run(&mut terminal, &mut source, config, seed);
+
+    // Put back any priorities we changed before leaving.
+    source.restore_all_priorities();
 
     if mouse {
         let _ = execute!(std::io::stdout(), DisableMouseCapture);
@@ -143,7 +146,7 @@ fn main() -> Result<()> {
 
 fn run(
     terminal: &mut ratatui::DefaultTerminal,
-    mut source: SysinfoSource,
+    source: &mut SysinfoSource,
     config: Config,
     seed: u64,
 ) -> Result<()> {
@@ -155,6 +158,8 @@ fn run(
 
     let mut last_frame = Instant::now();
     let mut last_sample = Instant::now();
+    // Only warn once per run when the kernel refuses to change priorities.
+    let mut renice_denied = false;
 
     loop {
         // Sample the process table on its own timer.
@@ -193,11 +198,17 @@ fn run(
         last_frame = now;
         app.update(dt);
 
-        // Apply any priority nudges the tank earned this frame.
-        for pid in app.take_pending_boosts() {
-            if source.boost_priority(pid) == PriorityBoost::Denied {
-                app.status = Some(format!("could not renice {pid} (need privileges)"));
+        // Apply any priority nudges the tank earned this frame, and undo those
+        // for processes that have left. The "denied" note is shown once.
+        for id in app.take_pending_boosts() {
+            if source.boost_priority(id) == PriorityBoost::Denied && !renice_denied {
+                renice_denied = true;
+                app.status =
+                    Some("could not renice (need privileges); feeding has no effect".into());
             }
+        }
+        for id in app.take_pending_restores() {
+            source.restore_priority(id);
         }
 
         terminal.draw(|frame| render::draw(frame, &app))?;

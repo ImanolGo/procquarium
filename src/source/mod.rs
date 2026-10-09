@@ -72,13 +72,19 @@ impl Snapshot {
 pub trait ProcessSource {
     fn snapshot(&mut self) -> Result<Snapshot>;
 
-    /// Nudge `pid` towards a slightly higher priority. Opt-in and best-effort:
-    /// on Unix this lowers the nice value, which needs `CAP_SYS_NICE`, so it
-    /// commonly comes back `Denied`. The default is a no-op so fakes and
-    /// platforms without priorities stay quiet.
-    fn boost_priority(&mut self, _pid: u32) -> PriorityBoost {
+    /// Nudge a process towards a slightly higher priority. Opt-in and
+    /// best-effort: on Unix this lowers the nice value, which needs
+    /// `CAP_SYS_NICE`, so it commonly comes back `Denied`. The default is a
+    /// no-op so fakes and platforms without priorities stay quiet.
+    fn boost_priority(&mut self, _id: (u32, u64)) -> PriorityBoost {
         PriorityBoost::Unsupported
     }
+
+    /// Undo the boost for one process, if it was boosted.
+    fn restore_priority(&mut self, _id: (u32, u64)) {}
+
+    /// Undo every boost (called on the way out).
+    fn restore_all_priorities(&mut self) {}
 }
 
 /// Result of a [`ProcessSource::boost_priority`] attempt.
@@ -95,6 +101,7 @@ pub enum PriorityBoost {
 
 #[cfg(test)]
 pub mod fake;
+pub mod priority;
 pub mod sysinfo_source;
 
 #[cfg(test)]

@@ -54,8 +54,11 @@ pub struct Tank {
     pub time: f32,
     /// Count of fish hatched this run, for the status line.
     pub hatched: u64,
-    /// Pids that ate since the last [`Tank::take_eaten`].
-    eaten: Vec<u32>,
+    /// Processes that ate since the last [`Tank::take_eaten`].
+    eaten: Vec<ProcInfo>,
+    /// Identities that left the tank (died or finished leaving) since the last
+    /// [`Tank::take_departed`].
+    departed: Vec<(u32, u64)>,
     rng: ChaCha8Rng,
 }
 
@@ -75,6 +78,7 @@ impl Tank {
             time: 0.0,
             hatched: 0,
             eaten: Vec::new(),
+            departed: Vec::new(),
             rng,
         }
     }
@@ -186,7 +190,9 @@ impl Tank {
                 ProcEvent::Exited { pid } => {
                     self.eggs.retain(|e| e.info.pid != *pid);
                     if let Some(f) = self.living_fish_mut(*pid) {
+                        let id = f.identity();
                         f.begin_exit();
+                        self.departed.push(id);
                     }
                 }
                 ProcEvent::Changed(info) => {
@@ -228,12 +234,15 @@ impl Tank {
 
         // Anything selected no longer gets to stay: swim away.
         let w = self.width as f32;
+        let mut leaving = Vec::new();
         for f in &mut self.fish {
             if f.state == FishState::Alive && !selected_ids.contains(&f.identity()) {
                 let dir = if f.pos.0 < w / 2.0 { -1.0 } else { 1.0 };
+                leaving.push(f.identity());
                 f.begin_leaving(dir);
             }
         }
+        self.departed.extend(leaving);
     }
 
     /// Creatures that are alive or leaving (i.e. not floating corpses). Eggs
@@ -332,7 +341,7 @@ impl Tank {
                 .position(|p| (p.x - f.pos.0).abs() < 2.2 && (f.pos.1 - p.y).abs() < 1.6)
             {
                 f.fed = 2.5;
-                self.eaten.push(f.pid);
+                self.eaten.push(f.info.clone());
                 eaten.push(index);
             }
         }
@@ -343,6 +352,14 @@ impl Tank {
         }
         self.food.truncate(FOOD_LIMIT);
 
+        // Record departures (for priority restore) before dropping corpses.
+        let finished: Vec<(u32, u64)> = self
+            .fish
+            .iter()
+            .filter(|f| f.finished())
+            .map(|f| f.identity())
+            .collect();
+        self.departed.extend(finished);
         self.fish.retain(|f| !f.finished());
 
         self.decor
@@ -363,9 +380,14 @@ impl Tank {
         });
     }
 
-    /// Pids that ate since the last call.
-    pub fn take_eaten(&mut self) -> Vec<u32> {
+    /// Processes that ate since the last call.
+    pub fn take_eaten(&mut self) -> Vec<ProcInfo> {
         std::mem::take(&mut self.eaten)
+    }
+
+    /// Identities that left the tank since the last call.
+    pub fn take_departed(&mut self) -> Vec<(u32, u64)> {
+        std::mem::take(&mut self.departed)
     }
 
     /// Fish pids in a stable order (as they appear in the tank), for cycling.
@@ -537,7 +559,7 @@ mod tests {
         let mut ate = false;
         for _ in 0..800 {
             tank.update(0.02);
-            if tank.take_eaten().contains(&1) {
+            if tank.take_eaten().iter().any(|p| p.pid == 1) {
                 ate = true;
                 break;
             }

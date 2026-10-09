@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users};
 
+use super::priority::{BoostBook, PriorityBackend};
 use super::{PriorityBoost, ProcInfo, ProcStatus, ProcessSource, Snapshot};
 
 /// Live process source. A fresh `SysinfoSource` performs one refresh on
@@ -19,6 +20,9 @@ pub struct SysinfoSource {
     /// Cached container classification keyed by pid, tagged with the start time
     /// it was computed for so a reused PID is re-checked.
     container_cache: HashMap<u32, (u64, bool)>,
+    /// Original niceness of processes we have fed, so boosts are capped and can
+    /// be undone.
+    book: BoostBook,
 }
 
 impl SysinfoSource {
@@ -33,6 +37,7 @@ impl SysinfoSource {
             users: Users::new_with_refreshed_list(),
             ncpu,
             container_cache: HashMap::new(),
+            book: BoostBook::new(),
         }
     }
 }
@@ -146,26 +151,78 @@ impl ProcessSource for SysinfoSource {
         Ok(Snapshot::new(procs).with_load(load))
     }
 
-    /// Raise priority by lowering niceness, but never past -20. This normally
-    /// needs privileges, so an unprivileged user will see `Denied`.
+    /// Give a fed process one more step of priority, capped and reversible.
     #[cfg(unix)]
-    fn boost_priority(&mut self, pid: u32) -> PriorityBoost {
-        let nice = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid as libc::id_t) };
-        let nice = if (-20..=19).contains(&nice) { nice } else { 0 };
-        let target = (nice - 1).max(-20);
-        if target == nice {
-            return PriorityBoost::Applied;
-        }
-        let rc = unsafe { libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, target) };
-        if rc == 0 {
-            PriorityBoost::Applied
-        } else {
-            PriorityBoost::Denied
-        }
+    fn boost_priority(&mut self, id: (u32, u64)) -> PriorityBoost {
+        let mut backend = UnixPriority;
+        self.book.boost(id, id.0, &mut backend)
+    }
+
+    #[cfg(unix)]
+    fn restore_priority(&mut self, id: (u32, u64)) {
+        let mut backend = UnixPriority;
+        let _ = self.book.restore(id, &mut backend);
+    }
+
+    #[cfg(unix)]
+    fn restore_all_priorities(&mut self) {
+        let mut backend = UnixPriority;
+        let _ = self.book.restore_all(&mut backend);
     }
 
     #[cfg(not(unix))]
-    fn boost_priority(&mut self, _pid: u32) -> PriorityBoost {
+    fn boost_priority(&mut self, _id: (u32, u64)) -> PriorityBoost {
         PriorityBoost::Unsupported
     }
+}
+
+/// The real `getpriority`/`setpriority` calls.
+#[cfg(unix)]
+struct UnixPriority;
+
+#[cfg(unix)]
+impl PriorityBackend for UnixPriority {
+    fn get(&mut self, pid: u32) -> Option<i32> {
+        // getpriority returns -1 both for a genuine nice of -1 and for an
+        // error, so clear errno first and check it after.
+        let errno = errno_location();
+        if !errno.is_null() {
+            unsafe { *errno = 0 };
+        }
+        let value = unsafe { libc::getpriority(libc::PRIO_PROCESS, pid as libc::id_t) };
+        let err = if errno.is_null() {
+            0
+        } else {
+            unsafe { *errno }
+        };
+        if value == -1 && err != 0 {
+            None
+        } else {
+            Some(value)
+        }
+    }
+
+    fn set(&mut self, pid: u32, nice: i32) -> bool {
+        unsafe { libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, nice) == 0 }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn errno_location() -> *mut libc::c_int {
+    unsafe { libc::__errno_location() }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn errno_location() -> *mut libc::c_int {
+    unsafe { libc::__error() }
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+)))]
+fn errno_location() -> *mut libc::c_int {
+    std::ptr::null_mut()
 }
