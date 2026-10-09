@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-09
+
+### Added
+
+- A library target exposing the pure parts of the project (process source,
+  diffing, tank simulation, rendering, config and theme), so the crate can be
+  used as a dependency and docs.rs can build API documentation. Previously
+  docs.rs failed with "no library targets found in package".
+
+### Changed
+
+- The `procquarium` binary is now a thin shell over the library.
+
 ## [0.2.3] - 2026-10-09
 
 ### Added
@@ -83,7 +96,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.3
 [0.2.2]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.1

@@ -1,12 +1,6 @@
 //! procquarium: your running processes, as fish.
-
-mod app;
-mod config;
-mod diff;
-mod render;
-mod source;
-mod tank;
-mod theme;
+//!
+//! This is the binary crate; the reusable pieces live in the library.
 
 use std::time::{Duration, Instant};
 
@@ -15,11 +9,12 @@ use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use rand::Rng;
 
-use crate::app::App;
-use crate::config::Config;
-use crate::render::human_bytes;
-use crate::source::sysinfo_source::SysinfoSource;
-use crate::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
+use procquarium::app::App;
+use procquarium::config::Config;
+use procquarium::render::{self, human_bytes};
+use procquarium::source::sysinfo_source::SysinfoSource;
+use procquarium::source::{PriorityBoost, ProcStatus, ProcessSource, Snapshot};
+use procquarium::theme;
 
 const EXAMPLES: &str = "\
 Examples:
