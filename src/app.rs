@@ -157,6 +157,12 @@ impl App {
         self.selected = Some(pids[next]);
     }
 
+    /// Select the fish under a terminal cell, or clear the selection when the
+    /// click lands on empty water.
+    pub fn select_at(&mut self, column: u16, row: u16) {
+        self.selected = crate::render::fish_at(self, column, row);
+    }
+
     pub fn adjust_max_fish(&mut self, delta: isize) {
         let new = (self.config.max_fish as isize + delta).max(1) as usize;
         self.config.max_fish = new;
@@ -321,6 +327,21 @@ mod tests {
 
     fn config_max(n: usize) -> Config {
         Config::builder().max_fish(n).build().expect("valid")
+    }
+
+    #[test]
+    fn clicking_a_fish_selects_it_and_empty_water_clears() {
+        let mut app = App::new(config_max(5), 80, 24, 1);
+        app.apply_snapshot(snapshot(vec![proc(1, "a")]));
+        for _ in 0..150 {
+            app.update(0.01);
+        }
+        app.tank.fish[0].pos = (40.0, 12.0);
+        let pid = app.tank.fish[0].pid;
+        app.select_at(40, 12);
+        assert_eq!(app.selected, Some(pid));
+        app.select_at(5, 5);
+        assert_eq!(app.selected, None);
     }
 
     #[test]

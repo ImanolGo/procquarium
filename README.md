@@ -94,6 +94,7 @@ Keys while it's running:
 | `Tab` / `Shift+Tab` | Cycle through fish and show details (PID, CPU, memory) |
 | `+` / `-` | More or fewer fish |
 | `f` | Drop food (with `--feed`) |
+| Click a fish | Select it (click empty water to clear) |
 
 Flags:
 
@@ -107,6 +108,7 @@ Flags:
 | `--ascii` | Use plain ASCII glyphs instead of the Unicode ones |
 | `--screensaver` | Exit on any key or mouse event; no labels or info box |
 | `--feed` | Let `f` drop food; fed fish get a small priority nudge |
+| `--no-mouse` | Don't capture the mouse (keeps text selection working) |
 | `--config <PATH>` | Load a theme from a TOML file |
 | `--seed <N>` | Fixed random seed, for a reproducible tank |
 

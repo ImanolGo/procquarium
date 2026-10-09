@@ -30,6 +30,8 @@ pub struct Config {
     pub seed: Option<u64>,
     /// Print a snapshot and exit (hidden debugging flag).
     pub dump: bool,
+    /// Don't capture the mouse, so text selection in the terminal keeps working.
+    pub no_mouse: bool,
     /// Draw in the terminal's default colours (`NO_COLOR`).
     pub mono: bool,
     /// Colours and sprites, optionally loaded from a config file.
@@ -57,6 +59,7 @@ pub struct ConfigBuilder {
     feed: bool,
     seed: Option<u64>,
     dump: bool,
+    no_mouse: bool,
 }
 
 impl Default for ConfigBuilder {
@@ -72,6 +75,7 @@ impl Default for ConfigBuilder {
             feed: false,
             seed: None,
             dump: false,
+            no_mouse: false,
         }
     }
 }
@@ -127,6 +131,11 @@ impl ConfigBuilder {
         self
     }
 
+    pub fn no_mouse(mut self, no_mouse: bool) -> Self {
+        self.no_mouse = no_mouse;
+        self
+    }
+
     /// Validate and build the config, with a clear error for anything invalid.
     pub fn build(self) -> Result<Config> {
         if !self.interval_secs.is_finite() || self.interval_secs <= 0.0 {
@@ -167,6 +176,7 @@ impl ConfigBuilder {
             feed: self.feed,
             seed: self.seed,
             dump: self.dump,
+            no_mouse: self.no_mouse,
             mono: std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
             theme: Theme::default(),
         })

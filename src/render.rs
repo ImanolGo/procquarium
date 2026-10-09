@@ -138,6 +138,47 @@ fn paint(mono: bool, color: Color) -> Color {
     if mono { Color::Reset } else { color }
 }
 
+/// The pid of the living creature drawn under a cell, if any. Used by mouse
+/// clicks; drawn later (further along the vector) means on top.
+pub fn fish_at(app: &App, column: u16, row: u16) -> Option<u32> {
+    let ascii = app.config.ascii;
+    let (cx, cy) = (i32::from(column), i32::from(row));
+    let mut buf = Vec::with_capacity(8);
+    for fish in app.tank.fish.iter().rev() {
+        if fish.state == FishState::Exiting {
+            continue;
+        }
+        let half = sprite_len(&app.config.theme.sprites, fish, ascii, &mut buf) / 2;
+        let ox = fish.pos.0.round() as i32;
+        let oy = fish.pos.1.round() as i32;
+        if (cx - ox).abs() <= half && (cy - oy).abs() <= 1 {
+            return Some(fish.pid);
+        }
+    }
+    None
+}
+
+fn sprite_len(
+    sprites: &crate::tank::sprites::Sprites,
+    fish: &Fish,
+    ascii: bool,
+    buf: &mut Vec<char>,
+) -> i32 {
+    match fish.kind {
+        CreatureKind::Crab => sprites.crab_into(buf, ascii, false),
+        CreatureKind::Jellyfish => sprites.jellyfish_into(buf, ascii, false),
+        CreatureKind::Fish => {
+            let size = fish.size.round().clamp(0.0, 3.0) as u8;
+            if fish.state == FishState::Exiting {
+                sprites.dead_fish_into(buf, size, false, ascii);
+            } else {
+                sprites.fish_into(buf, size, false, ascii, false);
+            }
+        }
+    }
+    buf.len() as i32
+}
+
 fn draw_too_small(frame: &mut Frame, area: Rect, mono: bool) {
     let height = 3.min(area.height);
     let y = area.y + area.height.saturating_sub(height) / 2;

@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::Parser;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    MouseButton, MouseEventKind,
 };
 use crossterm::execute;
 use rand::Rng;
@@ -85,6 +86,10 @@ struct Cli {
     #[arg(long, value_name = "PATH")]
     config: Option<std::path::PathBuf>,
 
+    /// Don't capture the mouse, so text selection keeps working.
+    #[arg(long)]
+    no_mouse: bool,
+
     /// Print one snapshot as a table and exit.
     #[arg(long, hide = true)]
     dump: bool,
@@ -103,6 +108,7 @@ fn main() -> Result<()> {
         .feed(cli.feed)
         .seed(cli.seed)
         .dump(cli.dump)
+        .no_mouse(cli.no_mouse)
         .build()?;
 
     if config.dump {
@@ -119,10 +125,10 @@ fn main() -> Result<()> {
     let seed = config.seed.unwrap_or_else(|| rand::rng().random());
     let mut terminal = ratatui::init();
 
-    // In screensaver mode any mouse event exits, which only works if the
-    // terminal actually reports them. Capture the mouse just for that mode, and
-    // make sure we release it on the way out (including a panic).
-    let mouse = config.screensaver;
+    // Capture the mouse so clicks select fish. Turned off with --no-mouse (to
+    // keep text selection) and always on in screensaver mode, where any mouse
+    // event exits. Release it on the way out (including a panic).
+    let mouse = config.screensaver || !config.no_mouse;
     if mouse {
         let _ = execute!(std::io::stdout(), EnableMouseCapture);
         let previous = std::panic::take_hook();
@@ -230,7 +236,14 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
             }
         }
         Event::Resize(width, height) => app.resize(width, height),
-        Event::Mouse(_) if screensaver => return true,
+        Event::Mouse(mouse) => {
+            if screensaver {
+                return true;
+            }
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+                app.select_at(mouse.column, mouse.row);
+            }
+        }
         _ => {}
     }
     false
