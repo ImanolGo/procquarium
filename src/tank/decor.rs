@@ -32,6 +32,11 @@ pub struct Decor {
     bubble_timer: f32,
 }
 
+/// A process doing at least this many disk bytes per sample breathes at full
+/// rate; below `IO_MIN_BYTES` a trickle is ignored.
+const IO_SCALE: f32 = 1024.0 * 1024.0;
+const IO_MIN_BYTES: u64 = 16 * 1024;
+
 impl Decor {
     pub fn new() -> Self {
         Self::default()
@@ -100,6 +105,22 @@ impl Decor {
             }
         }
 
+        // Bubbles from processes doing disk I/O, in proportion to throughput.
+        for f in fish {
+            if f.state == FishState::Exiting || f.info.io < IO_MIN_BYTES {
+                continue;
+            }
+            let rate = (f.info.io as f32 / IO_SCALE).clamp(0.0, 1.0);
+            if rng.random::<f32>() < rate * dt * 6.0 {
+                self.bubbles.push(Bubble {
+                    x: f.pos.0,
+                    y: f.pos.1,
+                    vy: rng.random_range(1.5..3.5),
+                    big: true,
+                });
+            }
+        }
+
         // Rise and retire.
         for b in &mut self.bubbles {
             b.y -= b.vy * dt;
@@ -139,6 +160,33 @@ mod tests {
             assert!(d.bubbles.len() < 200, "bubbles must not grow forever");
         }
         assert!(!d.bubbles.is_empty(), "ambient bubbles should appear");
+    }
+
+    #[test]
+    fn busy_io_sheds_bubbles() {
+        let mut d = Decor::new();
+        let mut r = rng();
+        d.configure(80, 24, &mut r);
+        // A fish with no speed but heavy disk I/O should still breathe.
+        let f = Fish::new(
+            proc(1, "dd").with_memory(0).with_io(8 * 1024 * 1024),
+            (40.0, 10.0),
+            10.0,
+            0.0,
+            Facing::Right,
+            crate::tank::fish::CreatureKind::Fish,
+        );
+        let mut spawned = false;
+        for _ in 0..200 {
+            let before = d.bubbles.len();
+            d.update(0.05, 80, 24, &mut r, std::slice::from_ref(&f));
+            for b in d.bubbles.iter().skip(before) {
+                if (b.x - 40.0).abs() < 2.0 && (b.y - 10.0).abs() < 2.0 {
+                    spawned = true;
+                }
+            }
+        }
+        assert!(spawned, "an I/O-heavy fish should breathe bubbles");
     }
 
     #[test]

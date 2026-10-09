@@ -55,6 +55,7 @@ fn refresh_kind() -> ProcessRefreshKind {
     ProcessRefreshKind::nothing()
         .with_memory()
         .with_cpu()
+        .with_disk_usage()
         .with_user(UpdateKind::OnlyIfNotSet)
         .with_exe(UpdateKind::OnlyIfNotSet)
         // `nothing()` still enables `tasks` by default, which on Linux means every
@@ -127,6 +128,8 @@ impl ProcessSource for SysinfoSource {
                 .map(|u| u.name().to_string());
             let cpu = process.cpu_usage();
             cpu_total += cpu;
+            let disk = process.disk_usage();
+            let io = disk.read_bytes + disk.written_bytes;
 
             procs.insert(
                 pid,
@@ -141,6 +144,7 @@ impl ProcessSource for SysinfoSource {
                     start_time,
                     kernel,
                     container,
+                    io,
                 },
             );
         }

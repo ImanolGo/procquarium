@@ -32,6 +32,8 @@ pub struct ProcInfo {
     pub kernel: bool,
     /// True when the process appears to run inside a container.
     pub container: bool,
+    /// Disk bytes read and written since the last sample, for the I/O bubbles.
+    pub io: u64,
 }
 
 impl ProcInfo {
@@ -120,6 +122,7 @@ mod tests {
             start_time: 1,
             kernel: false,
             container: false,
+            io: 0,
         }
     }
 
