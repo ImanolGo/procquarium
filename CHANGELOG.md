@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-09
+
+### Fixed
+
+- Declare the actual MSRV: `rust-version = "1.95"` instead of 1.88. The
+  dependency tree (every `sysinfo` 0.39.x) requires 1.95, so `cargo install`
+  on an older toolchain failed with a confusing dependency error rather than a
+  clear "needs rustc 1.95". Add an MSRV CI job so the claim stays honest.
+
 ## [0.2.4] - 2026-10-09
 
 ### Added
@@ -96,7 +105,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hidden `--dump` flag that prints the process table as a table.
 - CI on Linux, macOS and Windows.
 
-[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/ImanolGo/procquarium/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.3
 [0.2.2]: https://github.com/ImanolGo/procquarium/releases/tag/v0.2.2

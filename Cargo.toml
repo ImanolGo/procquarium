@@ -1,8 +1,8 @@
 [package]
 name = "procquarium"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 description = "Your running processes, as fish."
 license = "MIT"
 authors = ["ImanolGo <ImanolGo@users.noreply.github.com>"]

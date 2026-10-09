@@ -61,6 +61,8 @@ sudo apt install ./procquarium_*.deb
 
 ### With a Rust toolchain
 
+Requires Rust **1.95** or newer.
+
 ```sh
 cargo install procquarium
 ```

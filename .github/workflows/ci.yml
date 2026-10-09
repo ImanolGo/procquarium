@@ -33,3 +33,18 @@ jobs:
 
       - name: Test
         run: cargo test --all-targets
+
+  msrv:
+    name: msrv (1.95.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Keep the declared rust-version honest: build against the pinned lockfile
+      # with exactly the minimum supported toolchain.
+      - name: Build at the declared MSRV
+        run: cargo build --all-targets --locked
