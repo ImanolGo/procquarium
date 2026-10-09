@@ -1,7 +1,7 @@
 # procquarium
 
 [![crates.io](https://img.shields.io/crates/v/procquarium.svg)](https://crates.io/crates/procquarium)
-[![docs.rs](https://docs.rs/procquarium/badge.svg)](https://docs.rs/procquarium)
+[![docs.rs](https://docs.rs/procquarium/badge.svg?v=2)](https://docs.rs/procquarium)
 [![CI](https://github.com/ImanolGo/procquarium/actions/workflows/ci.yml/badge.svg)](https://github.com/ImanolGo/procquarium/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/ImanolGo/procquarium)](https://github.com/ImanolGo/procquarium/releases)
 [![License: MIT](https://img.shields.io/crates/l/procquarium.svg)](LICENSE)
