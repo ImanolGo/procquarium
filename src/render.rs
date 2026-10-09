@@ -2,8 +2,10 @@
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 
 use crate::app::App;
 use crate::source::ProcStatus;
@@ -23,8 +25,17 @@ const PANEL_FG: Color = Color::Rgb(205, 224, 244);
 const MUTED: Color = Color::Rgb(140, 165, 190);
 const ZOMBIE: Color = Color::DarkGray;
 
+/// Minimum terminal size we are willing to draw a tank in.
+const MIN_WIDTH: u16 = 20;
+const MIN_HEIGHT: u16 = 8;
+
 pub fn draw(frame: &mut Frame, app: &App) {
     let area = frame.area();
+
+    if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
+        draw_too_small(frame, area);
+        return;
+    }
 
     let time = app.tank.time;
     let ascii = app.config.ascii;
@@ -100,6 +111,23 @@ pub fn draw(frame: &mut Frame, app: &App) {
             );
         }
     }
+}
+
+fn draw_too_small(frame: &mut Frame, area: Rect) {
+    let height = 3.min(area.height);
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    let rect = Rect::new(area.x, y, area.width, height);
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::styled(
+                "procquarium",
+                Style::default().fg(PANEL_FG).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled("make me bigger", Style::default().fg(MUTED))),
+        ])
+        .alignment(Alignment::Center),
+        rect,
+    );
 }
 
 fn draw_surface(buf: &mut Buffer, area: Rect, time: f32) {
@@ -425,6 +453,17 @@ mod tests {
         let mut terminal = Terminal::new(backend).expect("terminal");
         terminal.draw(|frame| draw(frame, &app)).expect("draw");
         insta::assert_snapshot!(terminal.backend().to_string());
+    }
+
+    #[test]
+    fn tiny_terminal_shows_a_message() {
+        let app = test_app(12, 4);
+        let backend = TestBackend::new(12, 4);
+        let mut terminal = Terminal::new(backend).expect("terminal");
+        terminal.draw(|frame| draw(frame, &app)).expect("draw");
+        let rendered = terminal.backend().to_string();
+        assert!(rendered.contains("procquarium"));
+        assert!(rendered.contains("make me"));
     }
 
     #[test]

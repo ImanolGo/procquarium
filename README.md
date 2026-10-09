@@ -44,9 +44,11 @@ Once it's on crates.io, `cargo install procquarium` will do.
 
 ```sh
 procquarium                 # open the tank
-procquarium --screensaver   # any key exits
+procquarium --screensaver   # any key or mouse event exits
 procquarium --user $USER    # only your own processes
 procquarium --max-fish 120  # crowded tank
+procquarium --filter '^rust' --interval 0.5
+procquarium --seed 7        # the same tank every time
 ```
 
 Keys while it's running:
@@ -56,8 +58,31 @@ Keys while it's running:
 | `q` / `Esc` | Quit |
 | `Space` | Pause the tank |
 | `l` | Show or hide process names |
-| `Tab` | Cycle through fish and show details (PID, CPU, memory) |
+| `Tab` / `Shift+Tab` | Cycle through fish and show details (PID, CPU, memory) |
 | `+` / `-` | More or fewer fish |
+
+Flags:
+
+| Flag | Does |
+| --- | --- |
+| `--interval <SECS>` | Seconds between process samples (default 1) |
+| `--max-fish <N>` | Maximum number of fish (default 60) |
+| `--user <USER>` | Only show processes owned by this user |
+| `--filter <REGEX>` | Only show processes whose name matches |
+| `--kernel` | Include kernel threads (hidden by default) |
+| `--ascii` | Use plain ASCII glyphs instead of the Unicode ones |
+| `--screensaver` | Exit on any key or mouse event; no labels or info box |
+| `--seed <N>` | Fixed random seed, for a reproducible tank |
+
+`procquarium --dump` (hidden) prints the process table as a plain table and
+exits; it's handy for checking what the aquarium would see on another machine.
+
+A demo GIF is recorded from [`demo.tape`](demo.tape) with
+[vhs](https://github.com/charmbracelet/vhs):
+
+```sh
+vhs demo.tape
+```
 
 ### As a real screensaver
 
@@ -81,6 +106,8 @@ procquarium tries hard to be a polite guest. It should stay under a couple of pe
 ## Contributing
 
 Issues and pull requests are welcome. If you have an idea for a new creature (a crab for kernel threads? a jellyfish for containers?), open an issue first so we can talk it through.
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the build stages, design notes and how the milestones fit together.
 
 ## License
 

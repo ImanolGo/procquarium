@@ -3,7 +3,7 @@
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 
-use super::fish::{Facing, Fish};
+use super::fish::{Fish, FishState};
 
 /// A strand of seaweed anchored on the sand.
 #[derive(Debug, Clone)]
@@ -85,8 +85,12 @@ impl Decor {
 
         // Bubbles from fast-swimming fish, from just ahead of the mouth.
         for f in fish {
-            if f.speed > 12.0 && rng.random::<f32>() < dt * 1.2 {
-                let ahead = if f.facing == Facing::Right { 2.0 } else { -2.0 };
+            if f.state == FishState::Alive && f.speed > 12.0 && rng.random::<f32>() < dt * 1.2 {
+                let ahead = if f.facing == super::fish::Facing::Right {
+                    2.0
+                } else {
+                    -2.0
+                };
                 self.bubbles.push(Bubble {
                     x: f.pos.0 + ahead,
                     y: f.pos.1,
@@ -108,6 +112,7 @@ impl Decor {
 mod tests {
     use super::*;
     use crate::source::fake::proc;
+    use crate::tank::fish::{Facing, Fish};
 
     fn rng() -> ChaCha8Rng {
         use rand::SeedableRng;

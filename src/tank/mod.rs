@@ -62,6 +62,23 @@ impl Tank {
         }
     }
 
+    /// Handle a terminal resize: regenerate decor and re-clamp positions.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.width = width;
+        self.height = height;
+        self.decor.configure(width, height, &mut self.rng);
+        let w = width.max(2) as f32;
+        let top = 1.0_f32;
+        let bottom = (height.max(3) as f32 - 2.0).max(top);
+        for f in &mut self.fish {
+            f.pos.0 = f.pos.0.clamp(0.5, (w - 1.5).max(0.5));
+            f.pos.1 = f.pos.1.clamp(top, bottom);
+        }
+        for e in &mut self.eggs {
+            e.x = e.x.clamp(2.0, (w - 2.0).max(2.0));
+        }
+    }
+
     /// True if this pid is already represented by a fish or egg.
     pub fn contains(&self, pid: u32) -> bool {
         self.fish.iter().any(|f| f.pid == pid) || self.eggs.iter().any(|e| e.pid == pid)

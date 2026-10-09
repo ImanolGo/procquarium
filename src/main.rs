@@ -187,6 +187,7 @@ fn handle_event(app: &mut App, event: Event, screensaver: bool) -> bool {
                 _ => {}
             }
         }
+        Event::Resize(width, height) => app.resize(width, height),
         Event::Mouse(_) if screensaver => return true,
         _ => {}
     }

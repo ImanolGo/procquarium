@@ -39,6 +39,9 @@ fn refresh_kind() -> ProcessRefreshKind {
         .with_cpu()
         .with_user(UpdateKind::OnlyIfNotSet)
         .with_exe(UpdateKind::OnlyIfNotSet)
+        // `nothing()` still enables `tasks` by default, which on Linux means every
+        // thread is reported as a process. A fish is a process, so opt out.
+        .without_tasks()
 }
 
 fn map_status(status: sysinfo::ProcessStatus) -> ProcStatus {

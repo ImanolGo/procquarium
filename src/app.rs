@@ -62,6 +62,10 @@ impl App {
         }
     }
 
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.tank.resize(width, height);
+    }
+
     /// Move the selection forward or backward through the current fish.
     pub fn select_next(&mut self, backwards: bool) {
         let pids = self.tank.fish_pids();
