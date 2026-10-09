@@ -19,6 +19,9 @@ pub struct App {
     /// False until the second (CPU-meaningful) sample has arrived.
     pub ready: bool,
     pub status: Option<String>,
+    /// Overall system load in `0.0..=1.0` from the latest sample; drives the
+    /// day/night cycle.
+    pub load: f32,
     prev: Snapshot,
     pub tick: f32,
 }
@@ -34,6 +37,7 @@ impl App {
             selected: None,
             ready: false,
             status: Some("filling the tank…".to_string()),
+            load: 0.0,
             prev: Snapshot::default(),
             tick: 0.0,
         }
@@ -44,6 +48,7 @@ impl App {
         let events = diff::diff(&self.prev, &snapshot);
         let selected: HashSet<u32> = select_pids(&snapshot, &self.config).into_iter().collect();
         self.tank.apply(&events, &selected);
+        self.load = snapshot.load;
         self.prev = snapshot;
         self.ready = true;
         self.status = None;

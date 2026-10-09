@@ -29,6 +29,7 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 | An egg hatching on the sand | A process that just started |
 | A belly-up fish drifting upwards | A process that just exited |
 | A grey fish with ✕ eyes | A zombie process |
+| Water getting darker | Overall system load rising |
 
 ## Install
 

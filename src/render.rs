@@ -39,6 +39,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     let time = app.tank.time;
     let ascii = app.config.ascii;
+
+    // Day/night: as the machine gets busier the water gets darker.
+    let night = night_fraction(app.load);
+    let top = dim(WATER_TOP, night);
+    let bottom = dim(WATER_BOTTOM, night);
     let buf = frame.buffer_mut();
 
     // Water background, a touch darker towards the sand.
@@ -48,7 +53,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         } else {
             0.0
         };
-        let style = Style::default().bg(lerp(WATER_TOP, WATER_BOTTOM, t));
+        let style = Style::default().bg(lerp(top, bottom, t));
         buf.set_style(Rect::new(area.x, y, area.width, 1), style);
     }
 
@@ -413,6 +418,27 @@ fn lerp(a: Color, b: Color, t: f32) -> Color {
     }
 }
 
+/// How dark the water should be for a given load. Capped so a busy machine
+/// looks like dusk, not a black screen.
+pub fn night_fraction(load: f32) -> f32 {
+    load.clamp(0.0, 1.0) * 0.65
+}
+
+/// Scale a colour towards black by `amount` (0.0 = unchanged, 1.0 = black).
+pub fn dim(color: Color, amount: f32) -> Color {
+    match color {
+        Color::Rgb(r, g, b) => {
+            let k = (1.0 - amount).clamp(0.0, 1.0);
+            Color::Rgb(
+                (f32::from(r) * k).round() as u8,
+                (f32::from(g) * k).round() as u8,
+                (f32::from(b) * k).round() as u8,
+            )
+        }
+        other => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +499,21 @@ mod tests {
         assert_eq!(human_bytes(1024), "1.0 KiB");
         assert_eq!(human_bytes(1024 * 1024), "1.0 MiB");
         assert_eq!(human_bytes(3 * 1024 * 1024 * 1024), "3.0 GiB");
+    }
+
+    #[test]
+    fn night_fraction_is_bounded_and_monotonic() {
+        assert_eq!(night_fraction(0.0), 0.0);
+        assert!(night_fraction(1.0) <= 0.65);
+        assert!(night_fraction(0.2) < night_fraction(0.8));
+        assert_eq!(night_fraction(5.0), night_fraction(1.0));
+    }
+
+    #[test]
+    fn dim_scales_towards_black() {
+        let c = Color::Rgb(100, 200, 50);
+        assert_eq!(dim(c, 0.0), c);
+        assert_eq!(dim(c, 0.5), Color::Rgb(50, 100, 25));
+        assert_eq!(dim(c, 1.0), Color::Rgb(0, 0, 0));
     }
 }

@@ -50,11 +50,19 @@ impl ProcInfo {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Snapshot {
     pub procs: HashMap<u32, ProcInfo>,
+    /// Overall CPU load in `0.0..=1.0`, used to darken the water as the system
+    /// gets busier (the day/night cycle).
+    pub load: f32,
 }
 
 impl Snapshot {
     pub fn new(procs: HashMap<u32, ProcInfo>) -> Self {
-        Self { procs }
+        Self { procs, load: 0.0 }
+    }
+
+    pub fn with_load(mut self, load: f32) -> Self {
+        self.load = load.clamp(0.0, 1.0);
+        self
     }
 }
 
@@ -101,5 +109,12 @@ mod tests {
         assert_eq!(p.identity(), (7, 1));
         p.start_time = 2;
         assert_eq!(p.identity(), (7, 2));
+    }
+
+    #[test]
+    fn snapshot_load_is_clamped() {
+        assert_eq!(Snapshot::default().with_load(2.0).load, 1.0);
+        assert_eq!(Snapshot::default().with_load(-1.0).load, 0.0);
+        assert_eq!(Snapshot::default().with_load(0.4).load, 0.4);
     }
 }

@@ -14,15 +14,21 @@ use super::{ProcInfo, ProcStatus, ProcessSource, Snapshot};
 pub struct SysinfoSource {
     system: System,
     users: Users,
+    /// Number of logical CPUs, for turning summed process CPU into a 0..=1 load.
+    ncpu: f32,
 }
 
 impl SysinfoSource {
     pub fn new() -> Self {
         let mut system = System::new();
         system.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind());
+        let ncpu = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1) as f32;
         Self {
             system,
             users: Users::new_with_refreshed_list(),
+            ncpu,
         }
     }
 }
@@ -59,6 +65,7 @@ impl ProcessSource for SysinfoSource {
             .refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind());
 
         let mut procs = HashMap::with_capacity(self.system.processes().len());
+        let mut cpu_total = 0.0f32;
         for (pid, process) in self.system.processes() {
             let pid = pid.as_u32();
             let parent = process.parent().map(|p| p.as_u32());
@@ -69,6 +76,8 @@ impl ProcessSource for SysinfoSource {
                 .user_id()
                 .and_then(|id| self.users.get_user_by_id(id))
                 .map(|u| u.name().to_string());
+            let cpu = process.cpu_usage();
+            cpu_total += cpu;
 
             procs.insert(
                 pid,
@@ -76,7 +85,7 @@ impl ProcessSource for SysinfoSource {
                     pid,
                     parent,
                     name,
-                    cpu: process.cpu_usage(),
+                    cpu,
                     memory: process.memory(),
                     status: map_status(process.status()),
                     user,
@@ -86,6 +95,8 @@ impl ProcessSource for SysinfoSource {
             );
         }
 
-        Ok(Snapshot::new(procs))
+        // Summed per-core CPU over every process gives total load on the box.
+        let load = (cpu_total / (self.ncpu * 100.0)).clamp(0.0, 1.0);
+        Ok(Snapshot::new(procs).with_load(load))
     }
 }
