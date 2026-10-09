@@ -22,6 +22,13 @@ impl FakeSource {
             index: 0,
         }
     }
+
+    /// Convenience for tests that only care about rendering: a single snapshot
+    /// is both the warm-up and the live sample.
+    pub fn constant(procs: Vec<ProcInfo>) -> Self {
+        let snap = snapshot(procs);
+        Self::new(vec![snap.clone(), snap])
+    }
 }
 
 impl ProcessSource for FakeSource {
@@ -55,12 +62,18 @@ pub fn proc(pid: u32, name: &str) -> ProcInfo {
         status: ProcStatus::Sleeping,
         user: None,
         start_time: 1,
+        kernel: false,
     }
 }
 
 impl ProcInfo {
     pub fn with_cpu(mut self, cpu: f32) -> Self {
         self.cpu = cpu;
+        self
+    }
+
+    pub fn with_memory(mut self, memory: u64) -> Self {
+        self.memory = memory;
         self
     }
 
@@ -76,6 +89,16 @@ impl ProcInfo {
 
     pub fn with_status(mut self, status: ProcStatus) -> Self {
         self.status = status;
+        self
+    }
+
+    pub fn with_user(mut self, user: &str) -> Self {
+        self.user = Some(user.to_string());
+        self
+    }
+
+    pub fn kernel_thread(mut self) -> Self {
+        self.kernel = true;
         self
     }
 }

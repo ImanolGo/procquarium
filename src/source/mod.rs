@@ -28,6 +28,8 @@ pub struct ProcInfo {
     /// Seconds since the epoch when the process started. Together with `pid` this
     /// forms the identity of a process, so a reused PID is a birth, not a change.
     pub start_time: u64,
+    /// True for kernel threads (Linux: no executable path and parent 2, or pid 2).
+    pub kernel: bool,
 }
 
 impl ProcInfo {
@@ -79,6 +81,7 @@ mod tests {
             status: ProcStatus::Running,
             user: None,
             start_time: 1,
+            kernel: false,
         }
     }
 

@@ -1,0 +1,24 @@
+---
+source: src/render.rs
+expression: terminal.backend().to_string()
+---
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "
+"       <>)))°<                                              "
+"                                                            "
+"        ><((°>                                              "
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "
+"   <><                                                      "
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "
+"                                                            "

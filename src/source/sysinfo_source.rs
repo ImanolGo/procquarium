@@ -38,6 +38,7 @@ fn refresh_kind() -> ProcessRefreshKind {
         .with_memory()
         .with_cpu()
         .with_user(UpdateKind::OnlyIfNotSet)
+        .with_exe(UpdateKind::OnlyIfNotSet)
 }
 
 fn map_status(status: sysinfo::ProcessStatus) -> ProcStatus {
@@ -58,7 +59,9 @@ impl ProcessSource for SysinfoSource {
         for (pid, process) in self.system.processes() {
             let pid = pid.as_u32();
             let parent = process.parent().map(|p| p.as_u32());
+            let exe = process.exe();
             let name = process.name().to_string_lossy().into_owned();
+            let kernel = exe.is_none() && (parent == Some(2) || pid == 2);
             let user = process
                 .user_id()
                 .and_then(|id| self.users.get_user_by_id(id))
@@ -75,6 +78,7 @@ impl ProcessSource for SysinfoSource {
                     status: map_status(process.status()),
                     user,
                     start_time: process.start_time(),
+                    kernel,
                 },
             );
         }

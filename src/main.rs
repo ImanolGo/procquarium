@@ -1,19 +1,21 @@
 //! procquarium: your running processes, as fish.
 
-// The diff is only wired into the tank from M2 onwards; keep the module (and its
-// tests) here so M1 stands on its own without dead-code warnings.
-#[allow(dead_code)]
+mod app;
+mod config;
 mod diff;
+mod render;
 mod source;
+mod tank;
 
-use std::io;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::Frame;
-use ratatui::style::{Color, Style};
-use ratatui::widgets::Block;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use rand::Rng;
 
+use crate::app::App;
+use crate::config::Config;
+use crate::render::human_bytes;
 use crate::source::sysinfo_source::SysinfoSource;
 use crate::source::{ProcStatus, ProcessSource, Snapshot};
 
@@ -41,33 +43,59 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let config = Config::new(1.0, 60, None, None, false, false)?;
+    let seed = rand::rng().random();
+
     let mut terminal = ratatui::init();
-    let result = run(&mut terminal);
+    let result = run(&mut terminal, source, config, seed);
     ratatui::restore();
-    result?;
-    Ok(())
+    result
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal) -> io::Result<()> {
+fn run(
+    terminal: &mut ratatui::DefaultTerminal,
+    mut source: SysinfoSource,
+    config: Config,
+    seed: u64,
+) -> anyhow::Result<()> {
+    let size = terminal.size()?;
+    let mut app = App::new(config, size.width, size.height, seed);
+    let interval = app.config.interval;
+    let frame_target = Duration::from_millis(33);
+    let mut last_sample = Instant::now();
+
     loop {
-        terminal.draw(draw)?;
-        if let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-            && matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-        {
-            return Ok(());
+        // Sample the process table on its own timer.
+        if last_sample.elapsed() >= interval {
+            app.apply_snapshot(source.snapshot()?);
+            last_sample = Instant::now();
         }
+
+        // Drain input, waiting at most until the next frame is due.
+        loop {
+            if !event::poll(frame_target)? {
+                break;
+            }
+            if should_quit(&event::read()?) {
+                return Ok(());
+            }
+            if !event::poll(Duration::ZERO)? {
+                break;
+            }
+        }
+
+        terminal.draw(|frame| render::draw(frame, &app))?;
     }
 }
 
-fn draw(frame: &mut Frame) {
-    let area = frame.area();
-    frame.render_widget(
-        Block::bordered()
-            .style(Style::default().bg(Color::Blue))
-            .title("procquarium"),
-        area,
-    );
+fn should_quit(event: &Event) -> bool {
+    if let Event::Key(key) = event
+        && key.kind == KeyEventKind::Press
+    {
+        return matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
+            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL));
+    }
+    false
 }
 
 fn print_dump(snapshot: &Snapshot) {
@@ -112,20 +140,5 @@ fn truncate(text: &str, max: usize) -> String {
         text.to_string()
     } else {
         text.chars().take(max.saturating_sub(1)).collect::<String>() + "…"
-    }
-}
-
-fn human_bytes(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
     }
 }
