@@ -35,7 +35,7 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 You'll need a recent stable Rust toolchain.
 
 ```sh
-cargo install --git https://github.com/<you>/procquarium
+cargo install --git https://github.com/ImanolGo/procquarium
 ```
 
 Once it's on crates.io, `cargo install procquarium` will do.
