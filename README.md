@@ -12,7 +12,7 @@ procquarium is a terminal aquarium where every fish is a process on your machine
 
 ![procquarium: fish for processes, crabs for kernel threads, jellyfish for containers](https://raw.githubusercontent.com/ImanolGo/procquarium/main/demo.gif)
 
-> **Status:** 0.3 — usable and still growing. The plan lives in [PLAN.md](PLAN.md); see [DEVELOPMENT.md](DEVELOPMENT.md) for how it is built.
+> **Status:** 0.4 — a release candidate for 1.0, where the command-line interface, config file and recording format are meant to stay stable. The plan lives in [PLAN.md](PLAN.md); see [DEVELOPMENT.md](DEVELOPMENT.md) for how it is built.
 
 > **Library:** The library exists for docs and tests; it has no stability guarantee. The product is the `procquarium` binary.
 
