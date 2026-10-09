@@ -149,6 +149,7 @@ mod tests {
         let mut f = Fish::new(
             proc(1, "fast").with_cpu(100.0),
             (40.0, 10.0),
+            10.0,
             0.0,
             Facing::Right,
         );

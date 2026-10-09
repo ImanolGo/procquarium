@@ -30,7 +30,7 @@ impl App {
             tank: Tank::new(width, height, max_fish, seed),
             config,
             paused: false,
-            show_labels: false,
+            show_labels: true,
             selected: None,
             ready: false,
             status: Some("filling the tank…".to_string()),

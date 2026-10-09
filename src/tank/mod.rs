@@ -155,12 +155,13 @@ impl Tank {
         });
         for (info, x) in hatched {
             let phase = self.rng.random_range(0.0..std::f32::consts::TAU);
+            let home_y = self.rng.random_range(2.0..(h - 2.0).max(3.0));
             let facing = if self.rng.random::<bool>() {
                 Facing::Right
             } else {
                 Facing::Left
             };
-            let mut f = Fish::new(info, (x, h - 2.0), phase, facing);
+            let mut f = Fish::new(info, (x, h - 2.0), home_y, phase, facing);
             f.vel.1 = -2.5;
             self.fish.push(f);
             self.hatched += 1;

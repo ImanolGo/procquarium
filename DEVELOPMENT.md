@@ -65,6 +65,10 @@ arrives in M2, so M1 temporarily carries `#[allow(dead_code)]` (removed in M2).
   does not allocate per fish per frame.
 - **Degenerate terminal sizes.** A fresh pty reports 0×0; the decor code guards
   its random ranges and there is a regression test for tiny sizes.
+- **Fish roam the whole water column.** Each fish is given a slowly drifting
+  `home_y` it steers towards. Without it, fish hatched on the sand, got one
+  small upward impulse and then settled along the bottom instead of spreading
+  through the tank.
 - **No demo GIF is committed.** `demo.tape` is included and the README explains
   how to render it with [vhs](https://github.com/charmbracelet/vhs); recording
   it needs a real terminal and a running machine, which CI does not have.

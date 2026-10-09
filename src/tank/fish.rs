@@ -44,6 +44,9 @@ pub struct Fish {
     pub facing: Facing,
     /// Per-fish phase for the deterministic wander noise.
     pub phase: f32,
+    /// A slowly drifting depth the fish steers towards, so the water column
+    /// fills up instead of every fish hugging the sand.
+    pub home_y: f32,
     pub age: f32,
     /// Time spent in the current lifecycle state.
     pub timer: f32,
@@ -54,7 +57,7 @@ pub struct Fish {
 }
 
 impl Fish {
-    pub fn new(info: ProcInfo, pos: (f32, f32), phase: f32, facing: Facing) -> Self {
+    pub fn new(info: ProcInfo, pos: (f32, f32), home_y: f32, phase: f32, facing: Facing) -> Self {
         let target_size = f32::from(mapping::size_class(info.memory));
         let target_speed = if info.status == ProcStatus::Zombie {
             1.0
@@ -77,6 +80,7 @@ impl Fish {
             target_speed,
             facing,
             phase,
+            home_y,
             age: 0.0,
             timer: 0.0,
             death: 0.0,
@@ -183,6 +187,12 @@ impl Fish {
             self.vel.1 += (py - self.pos.1) * 0.5 * dt;
         }
 
+        // Drift towards a slowly moving home depth so the whole water column
+        // fills up rather than everyone settling on the sand.
+        let span = (bottom - top).max(1.0);
+        let desired_y = self.home_y + (self.age * 0.25 + self.phase).sin() * span * 0.15;
+        self.vel.1 += (desired_y - self.pos.1) * 0.8 * dt;
+
         // Cruise at the current (eased) speed.
         let dir = if self.vel.0 >= 0.0 { 1.0 } else { -1.0 };
         let cruise = 1.0 - (-dt / 0.5).exp();
@@ -228,7 +238,7 @@ mod tests {
 
     fn fish(mem: u64, cpu: f32) -> Fish {
         let info = proc(1, "test").with_memory(mem).with_cpu(cpu);
-        Fish::new(info, (20.0, 10.0), 0.0, Facing::Right)
+        Fish::new(info, (20.0, 10.0), 10.0, 0.0, Facing::Right)
     }
 
     #[test]
