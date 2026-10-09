@@ -111,6 +111,28 @@ one commit each:
   tested; the renderer reads the palette and a `Sprites` set out of the config,
   so custom sprites and colours flow everywhere with no globals.
 
+## Releasing
+
+A release is just a version tag:
+
+1. Bump `version` in `Cargo.toml`, add a `CHANGELOG.md` entry, and commit.
+2. `git tag -a vX.Y.Z -m "procquarium X.Y.Z"` and `git push origin vX.Y.Z`.
+
+The tag drives the rest:
+
+- **Release** (`dist`) builds the Linux/macOS/Windows archives with checksums
+  and the shell/PowerShell/MSI installers, and creates the GitHub Release.
+- **Debian package** builds the `.deb` and attaches it (it waits for the
+  release to appear first).
+- **Publish to crates.io** publishes the crate through Trusted Publishing
+  (OIDC); the one-time crates.io setup is documented in
+  `.github/workflows/publish.yml`.
+- **CI** runs fmt/clippy/tests on branch pushes.
+
+docs.rs builds once the crate is on crates.io. The AUR `PKGBUILD` in
+`packaging/aur` is updated by hand (bump `pkgver`, refresh the hash with
+`updpkgsums`, regenerate `.SRCINFO`).
+
 ## Running it
 
 ```sh

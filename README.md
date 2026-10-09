@@ -1,12 +1,18 @@
 # procquarium
 
+[![crates.io](https://img.shields.io/crates/v/procquarium.svg)](https://crates.io/crates/procquarium)
+[![docs.rs](https://docs.rs/procquarium/badge.svg)](https://docs.rs/procquarium)
+[![CI](https://github.com/ImanolGo/procquarium/actions/workflows/ci.yml/badge.svg)](https://github.com/ImanolGo/procquarium/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ImanolGo/procquarium)](https://github.com/ImanolGo/procquarium/releases)
+[![License: MIT](https://img.shields.io/crates/l/procquarium.svg)](LICENSE)
+
 Your running processes, as fish.
 
 procquarium is a terminal aquarium where every fish is a process on your machine. Big fish use a lot of memory, fast fish are burning CPU, and when a process exits its fish quietly floats to the surface. Leave it running in a spare pane or use it as a screensaver, and you'll start to recognise your machine's habits: the browser whale that never stops growing, the swarm of tiny shell fish that appear every time you run a build.
 
 ![procquarium: fish for processes, crabs for kernel threads, jellyfish for containers](https://raw.githubusercontent.com/ImanolGo/procquarium/main/demo.gif)
 
-> **Status:** early days. The plan lives in [PLAN.md](PLAN.md) and things will move around a lot until 0.1.
+> **Status:** 0.2 — usable and still growing. The plan lives in [PLAN.md](PLAN.md); see [DEVELOPMENT.md](DEVELOPMENT.md) for how it is built.
 
 ## What the fish mean
 
