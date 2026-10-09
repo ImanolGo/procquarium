@@ -1,5 +1,7 @@
 //! Draw the app into a ratatui frame.
 
+use std::collections::HashSet;
+
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Rect};
@@ -81,6 +83,23 @@ pub fn draw(frame: &mut Frame, app: &App) {
         );
     }
 
+    // Family of the selected fish: highlight the parent and children, and run
+    // a faint dotted line to the parent.
+    let mut family: HashSet<u32> = HashSet::new();
+    if let Some(fish) = app.selected_fish() {
+        if let Some(parent) = fish.info.parent {
+            family.insert(parent);
+        }
+        for other in &app.tank.fish {
+            if other.state != FishState::Exiting && other.info.parent == Some(fish.pid) {
+                family.insert(other.pid);
+            }
+        }
+        if let Some(parent) = fish.info.parent.and_then(|pid| app.tank.fish(pid)) {
+            draw_family_line(buf, area, fish.pos, parent.pos);
+        }
+    }
+
     // Reused across fish so rendering does not allocate per fish per frame.
     let mut sprites_buf: Vec<char> = Vec::with_capacity(8);
     for fish in &app.tank.fish {
@@ -89,6 +108,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             area,
             fish,
             app.selected == Some(fish.pid),
+            family.contains(&fish.pid),
             ascii,
             theme,
             &mut sprites_buf,
@@ -177,6 +197,19 @@ fn sprite_len(
         }
     }
     buf.len() as i32
+}
+
+/// A faint dotted line between the selected fish and its parent.
+fn draw_family_line(buf: &mut Buffer, area: Rect, from: (f32, f32), to: (f32, f32)) {
+    let style = Style::default().fg(MUTED).add_modifier(Modifier::DIM);
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let steps = dx.hypot(dy).ceil().max(1.0) as i32;
+    for i in 1..steps {
+        let t = i as f32 / steps as f32;
+        let x = (from.0 + dx * t).round() as i32;
+        let y = (from.1 + dy * t).round() as i32;
+        put(buf, area, x, y, '·', style);
+    }
 }
 
 fn draw_too_small(frame: &mut Frame, area: Rect, mono: bool) {
@@ -291,11 +324,13 @@ fn draw_food(buf: &mut Buffer, area: Rect, app: &App, ascii: bool) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_fish(
     buf: &mut Buffer,
     area: Rect,
     fish: &Fish,
     selected: bool,
+    family: bool,
     ascii: bool,
     theme: &Theme,
     sprite_buf: &mut Vec<char>,
@@ -321,6 +356,9 @@ fn draw_fish(
     }
     if selected {
         style = style.bg(SELECT_BG).add_modifier(Modifier::BOLD);
+    }
+    if family {
+        style = style.add_modifier(Modifier::UNDERLINED);
     }
 
     let facing_left = fish.facing == Facing::Left;
@@ -592,6 +630,34 @@ mod tests {
         let rendered = terminal.backend().to_string();
         assert!(rendered.contains("procquarium"));
         assert!(rendered.contains("make me"));
+    }
+
+    #[test]
+    fn selecting_a_fish_draws_a_line_to_its_parent() {
+        let config = Config::builder()
+            .max_fish(60)
+            .seed(Some(7))
+            .build()
+            .expect("valid");
+        let mut source =
+            FakeSource::constant(vec![proc(1, "parent"), proc(2, "child").with_parent(1)]);
+        let mut app = App::new(config, 60, 20, 7);
+        app.apply_snapshot(source.snapshot().expect("sample"));
+        for _ in 0..150 {
+            app.update(0.03);
+        }
+        // Put them far apart and select the child.
+        app.tank.fish[0].pos = (10.0, 5.0);
+        app.tank.fish[1].pos = (50.0, 15.0);
+        app.selected = Some(2);
+
+        let backend = TestBackend::new(60, 20);
+        let mut terminal = Terminal::new(backend).expect("terminal");
+        terminal.draw(|frame| draw(frame, &app)).expect("draw");
+        assert!(
+            terminal.backend().to_string().contains('·'),
+            "a dotted line should connect the child to its parent"
+        );
     }
 
     #[test]
