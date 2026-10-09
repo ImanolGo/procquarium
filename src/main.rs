@@ -44,7 +44,7 @@ struct Cli {
     interval: f64,
 
     /// Maximum number of fish in the tank.
-    #[arg(long, value_name = "N", default_value_t = 60)]
+    #[arg(long, value_name = "N", default_value_t = 25)]
     max_fish: usize,
 
     /// Only show processes owned by this user.

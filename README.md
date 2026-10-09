@@ -66,7 +66,7 @@ Flags:
 | Flag | Does |
 | --- | --- |
 | `--interval <SECS>` | Seconds between process samples (default 1) |
-| `--max-fish <N>` | Maximum number of fish (default 60) |
+| `--max-fish <N>` | Maximum number of fish (default 25) |
 | `--user <USER>` | Only show processes owned by this user |
 | `--filter <REGEX>` | Only show processes whose name matches |
 | `--kernel` | Include kernel threads (hidden by default) |
