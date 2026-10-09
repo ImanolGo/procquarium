@@ -34,6 +34,8 @@ pub struct ProcInfo {
     pub container: bool,
     /// Disk bytes read and written since the last sample, for the I/O bubbles.
     pub io: u64,
+    /// Seconds the process has been running, for the barnacles on old fish.
+    pub run_time: u64,
 }
 
 impl ProcInfo {
@@ -124,6 +126,7 @@ mod tests {
             kernel: false,
             container: false,
             io: 0,
+            run_time: 0,
         }
     }
 

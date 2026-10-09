@@ -69,6 +69,7 @@ pub fn proc(pid: u32, name: &str) -> ProcInfo {
         kernel: false,
         container: false,
         io: 0,
+        run_time: 0,
     }
 }
 
@@ -115,6 +116,11 @@ impl ProcInfo {
 
     pub fn with_io(mut self, io: u64) -> Self {
         self.io = io;
+        self
+    }
+
+    pub fn with_run_time(mut self, run_time: u64) -> Self {
+        self.run_time = run_time;
         self
     }
 }

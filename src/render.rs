@@ -175,6 +175,19 @@ fn paint(mono: bool, color: Color) -> Color {
     if mono { Color::Reset } else { color }
 }
 
+/// A barnacle for a long-running process: `·` after a day, `:` after a week.
+pub fn barnacle(run_time: u64) -> Option<char> {
+    const DAY: u64 = 24 * 60 * 60;
+    const WEEK: u64 = 7 * DAY;
+    if run_time >= WEEK {
+        Some(':')
+    } else if run_time >= DAY {
+        Some('·')
+    } else {
+        None
+    }
+}
+
 /// The pid of the living creature drawn under a cell, if any. Used by mouse
 /// clicks; drawn later (further along the vector) means on top.
 pub fn fish_at(app: &App, column: u16, row: u16) -> Option<u32> {
@@ -391,6 +404,10 @@ fn draw_fish(
         CreatureKind::Fish => theme
             .sprites
             .fish_into(sprite_buf, size, facing_left, ascii, zombie),
+    }
+
+    if let Some(mark) = barnacle(fish.info.run_time) {
+        sprite_buf.push(mark);
     }
 
     let len = sprite_buf.len() as i32;
@@ -676,6 +693,32 @@ mod tests {
             terminal.backend().to_string().contains('·'),
             "a dotted line should connect the child to its parent"
         );
+    }
+
+    #[test]
+    fn old_fish_grow_barnacles() {
+        assert_eq!(barnacle(0), None);
+        assert_eq!(barnacle(24 * 60 * 60), Some('·'));
+        assert_eq!(barnacle(8 * 24 * 60 * 60), Some(':'));
+
+        let config = Config::builder()
+            .max_fish(60)
+            .seed(Some(7))
+            .build()
+            .expect("valid");
+        let old = proc(1, "old").with_run_time(2 * 24 * 60 * 60);
+        let mut source = FakeSource::constant(vec![old]);
+        let mut app = App::new(config, 60, 20, 7);
+        app.apply_snapshot(source.snapshot().expect("sample"));
+        for _ in 0..150 {
+            app.update(0.03);
+        }
+        app.tank.fish[0].pos = (30.0, 10.0);
+
+        let backend = TestBackend::new(60, 20);
+        let mut terminal = Terminal::new(backend).expect("terminal");
+        terminal.draw(|frame| draw(frame, &app)).expect("draw");
+        assert!(terminal.backend().to_string().contains('·'));
     }
 
     #[test]

@@ -130,6 +130,7 @@ impl ProcessSource for SysinfoSource {
             cpu_total += cpu;
             let disk = process.disk_usage();
             let io = disk.read_bytes + disk.written_bytes;
+            let run_time = process.run_time();
 
             procs.insert(
                 pid,
@@ -145,6 +146,7 @@ impl ProcessSource for SysinfoSource {
                     kernel,
                     container,
                     io,
+                    run_time,
                 },
             );
         }
