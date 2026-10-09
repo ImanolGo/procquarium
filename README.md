@@ -69,11 +69,6 @@ Requires Rust **1.95** or newer.
 cargo install procquarium
 ```
 
-### Arch Linux
-
-A `PKGBUILD` is provided in [`packaging/aur`](packaging/aur) (not published to
-the AUR yet).
-
 ## Usage
 
 ```sh

@@ -150,9 +150,7 @@ The tag drives the rest:
   `.github/workflows/publish.yml`.
 - **CI** runs fmt/clippy/tests on branch pushes.
 
-docs.rs builds once the crate is on crates.io. The AUR `PKGBUILD` in
-`packaging/aur` is updated by hand (bump `pkgver`, refresh the hash with
-`updpkgsums`, regenerate `.SRCINFO`).
+docs.rs builds once the crate is on crates.io.
 
 ## Running it
 

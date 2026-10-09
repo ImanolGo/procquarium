@@ -115,7 +115,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Prebuilt binaries and installers (shell, PowerShell, MSI) for Linux, macOS
   and Windows, built by [dist](https://github.com/axodotdev/cargo-dist) on
   every version tag alongside source tarballs and checksums.
-- crates.io publishing metadata and an Arch `PKGBUILD` under `packaging/aur`.
+- crates.io publishing metadata.
 
 ## [0.2.0] - 2026-10-09
 
